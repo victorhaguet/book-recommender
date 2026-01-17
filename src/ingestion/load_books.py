@@ -60,7 +60,7 @@ def __clean_dataframe(df: pd.DataFrame, columns_to_drop: list[str]) -> pd.DataFr
     # Make sure that all the columns that should be removed are in the dataframe
     missing_cols: List[str] = [c for c in columns_to_drop if c not in df.columns]
     if missing_cols:
-        raise ValueError("These columns are not in the dataframes : %s. Please make sure to only select existing columns")
+        raise ValueError(f"These columns are not in the dataframes : {missing_cols}. Please make sure to only select existing columns")
 
     # Make sure that description is not part of the columns to drop
     has_description: bool = "description" in columns_to_drop
