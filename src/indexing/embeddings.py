@@ -33,8 +33,17 @@ def get_embeddings(
     :return: Embedding model that will be use. 
     :rtype: Embeddings
     """
+    # Normalise strategy
+    strategy = strategy.lower().strip()
+
+    # Check if the model variable is instantiate and is a string
+    if not model or not isinstance(model, str):
+        raise ValueError("model must be a non-empty string")
 
     if strategy == "openai":
+        # Check if the api_key is instantiate
+        if not api_key or not isinstance(api_key, str):
+            raise ValueError("api_key must be a non-empty string")
 
         # Prepare kwargs for OpenAIEmbeddings
         kwargs = {
