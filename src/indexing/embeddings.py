@@ -14,18 +14,19 @@ needed to run your model properly.
 Warning : If you are planning to use and Hugging face model,
 please make sure you have enough space to load it locally. 
 """
-import os
-from dotenv import load_dotenv
+
+from typing import Optional
 
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
-STRATEGY=os.getenv("STRATEGY")
-
-load_dotenv()
-
-def get_embeddings()->Embeddings:
+def get_embeddings(
+        strategy: str,
+        model: str,
+        api_key: Optional[str] = None, 
+        base_url: Optional[str] = None
+    )->Embeddings:
     """
     Initialise the embedding model according to the strategy chosen by the user. 
     
@@ -33,11 +34,7 @@ def get_embeddings()->Embeddings:
     :rtype: Embeddings
     """
 
-    if STRATEGY == "openai":
-        # Get .env variables
-        model = os.getenv("MODEL")
-        api_key = os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("BASE_URL")
+    if strategy == "openai":
 
         # Prepare kwargs for OpenAIEmbeddings
         kwargs = {
@@ -52,14 +49,11 @@ def get_embeddings()->Embeddings:
 
         return OpenAIEmbeddings(model_kwargs=kwargs)
 
-    elif STRATEGY == "hf":
-        # Get .env variables
-        model = os.getenv("MODEL")
+    elif strategy == "hf":
 
         return HuggingFaceEmbeddings(
             model_name = model
         )
 
     else:
-        raise ValueError("Please set the strategy variable to 'openai' or 'hf' depending on the type of embedding model you would like to use.")
-
+        raise ValueError("strategy must be 'openai' or 'hf'")
