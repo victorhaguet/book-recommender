@@ -61,9 +61,6 @@ def add_documents(documents: List[Document], vectorstore: FAISS)-> None:
     if vectorstore is None:
         raise ValueError("vectorstore must not be None")
 
-    if not documents:
-        raise ValueError("documents must be a non-empty list")
-
     vectorstore.add_documents(documents=documents)
 
 def save_store(vectorstore: FAISS, path: str, index_name: str)-> None:
@@ -112,6 +109,8 @@ def load_store(embeddings: Embeddings, path: str, index_name:str)->FAISS:
 
     try:
         return FAISS.load_local(folder_path=path, embeddings=embeddings, index_name=index_name)
+    except FileNotFoundError:
+        raise
     except Exception as e:
         raise RuntimeError(
             f"Failed to load FAISS store from '{path}' (index_name='{index_name}'). "
