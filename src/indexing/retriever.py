@@ -23,8 +23,15 @@ def set_retrieving_strategy(vectorstore: FAISS, k: int = 5)-> BaseRetriever:
     :return: Retriever
     :rtype: BaseRetriever
     """
-    retriever = vectorstore.as_retriever(k = k)
-    return retriever
+    if vectorstore is None:
+        raise ValueError("vectorstore must not be None")
+
+    if not isinstance(k, int) or k <= 0:
+        raise ValueError("k must be a positive integer")
+    try:
+        return vectorstore.as_retriever(k = k)
+    except Exception as e:
+        raise RuntimeError("Failed to create retriever from vectorstore") from e
 
 def call_retriever(retriever: BaseRetriever, query: str)-> List[Document]:
     """
@@ -37,4 +44,13 @@ def call_retriever(retriever: BaseRetriever, query: str)-> List[Document]:
     :return: retrieved chunks.
     :rtype: List[Document]
     """
-    return retriever.invoke(input=query)
+    if retriever is None:
+        raise ValueError("retriever must not be None")
+    
+    if not isinstance(query, str) or query.strip() == "":
+        raise ValueError("query must be a non-empty string")
+    
+    try:
+        return retriever.invoke(input=query)
+    except Exception as e:
+        raise RuntimeError("Failed to call retriever") from e
