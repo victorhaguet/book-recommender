@@ -17,6 +17,7 @@ please make sure you have enough space to load it locally.
 
 from typing import Optional
 
+from pydantic import SecretStr
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -45,18 +46,12 @@ def get_embeddings(
         if not api_key or not isinstance(api_key, str):
             raise ValueError("api_key must be a non-empty string")
 
-        # Prepare kwargs for OpenAIEmbeddings
-        kwargs = {
-            "model":model,
-            "api_key":api_key
-        }
-
-        # Add base_url if it exists
-        if base_url:
-            kwargs["base_url"] = base_url
-
-
-        return OpenAIEmbeddings(model_kwargs=kwargs)
+        # Instantiate OpenAIEmbeddings
+        return OpenAIEmbeddings(
+            model = model,
+            api_key= SecretStr(api_key),
+            base_url= base_url
+        )
 
     elif strategy == "hf":
 

@@ -62,7 +62,7 @@ def build_chain(
 
         # Build prompt input
         try:
-            messages: List[BaseMessage] = prompt.format_messages(retrieved_docs=context)
+            messages: List[BaseMessage] = prompt.format_messages(retrieved_books=context)
         except Exception as e:
             raise RuntimeError("Failed to format prompt with retrieved documents") from e
 
