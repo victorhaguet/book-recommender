@@ -108,7 +108,12 @@ def load_store(embeddings: Embeddings, path: str, index_name:str)->FAISS:
         raise ValueError("index_name must be a non-empty string")
 
     try:
-        return FAISS.load_local(folder_path=path, embeddings=embeddings, index_name=index_name)
+        return FAISS.load_local(
+            folder_path=path, 
+            embeddings=embeddings, 
+            index_name=index_name,
+            allow_dangerous_deserialization=True
+        )
     except FileNotFoundError:
         raise
     except Exception as e:
