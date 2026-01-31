@@ -6,7 +6,7 @@ Instead, simply call the load function from the faiss_store.py file.
 from typing import List
 
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
+from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 
 from src.ingestion.load_books import load_books
@@ -16,7 +16,7 @@ from src.indexing.faiss_store import create_faiss_db, add_documents, save_store
 def create_database(
         data_path: str, 
         columns_to_drop: List[str], 
-        embeddings: OpenAIEmbeddings,
+        embeddings: Embeddings,
         index_path: str,
         index_name: str
     ) -> FAISS:
