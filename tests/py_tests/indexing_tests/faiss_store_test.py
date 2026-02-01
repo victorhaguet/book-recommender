@@ -120,6 +120,7 @@ class TestFaissStore(unittest.TestCase):
             folder_path=FOLDER_PATH,
             embeddings=embeddings,
             index_name="test-index",
+            allow_dangerous_deserialization=True
         )
 
     @patch("src.indexing.faiss_store.FAISS.load_local")

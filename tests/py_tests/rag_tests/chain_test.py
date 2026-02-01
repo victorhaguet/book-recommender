@@ -36,7 +36,7 @@ class TestBuildChain(unittest.TestCase):
         self.assertEqual(result["retrieved_documents"], retriever.invoke.return_value)
         retriever.invoke.assert_called_once_with(input="query")
         format_docs.assert_called_once_with(retriever.invoke.return_value)
-        prompt.format_messages.assert_called_once_with(retrieved_docs="formatted")
+        prompt.format_messages.assert_called_once_with(retrieved_books="formatted")
         llm.invoke.assert_called_once_with(input=prompt.format_messages.return_value)
 
     def test_build_chain_validates_inputs(self):
