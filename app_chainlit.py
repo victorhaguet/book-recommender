@@ -35,6 +35,9 @@ def _get_env(keys: list[str], default: None = None, required: Literal[True] = Tr
 @overload
 def _get_env(keys: list[str], default: Optional[str] = None, required: Literal[False] = False) -> str | None: ...
 
+@overload
+def _get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None: ...
+
 
 def _get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None:
     """
@@ -59,12 +62,33 @@ def _get_env(keys: list[str], default: Optional[str] = None, required: bool = Fa
 
 
 def get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None:
-    """Public wrapper for environment lookup (exposed for tests/consumers)."""
+    """
+    Public wrapper for environment lookup (exposed for tests/consumers).
+    
+    :param keys: List of possible environment variable keys
+    :type keys: list[str]
+    :param default: Default value if no environment variable is found
+    :type default: Optional[str]
+    :param required: Whether at least one environment variable is required
+    :type required: bool
+    :return: The value of the first found environment variable or the default value
+    :rtype: str | None
+    
+    """
     return _get_env(keys, default, required)
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
-    """Parse common truthy/falsey strings into a boolean."""
+    """
+    Parse common truthy/falsey strings into a boolean.
+    
+    :param value: The string to be parsed into a boolean.
+    :type value: str | None
+    :param default: The default value returned if the input string is invalid.
+    :type default: bool
+    :return: The parsed boolean value.
+    :rtype: bool
+    """
     if value is None:
         return default
     normalized = value.strip().lower()
@@ -76,7 +100,16 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
 
 
 def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> List[str]:
-    """Parse a comma-separated string into a list."""
+    """
+    Parse a comma-separated string into a list.
+
+    :param value: A comma-separated string of values.
+    :type value: str | None
+    :param default: The default value to return if the input is None.
+    :type default: Optional[List[str]]
+    :return: A list of strings.
+    :rtype: List[str]
+    """
     if value is None:
         return default if default is not None else []
     items = [item.strip() for item in value.split(",")]
