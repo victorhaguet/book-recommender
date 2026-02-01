@@ -86,12 +86,9 @@ class TestGetEmbeddings(unittest.TestCase):
         self.assertIs(emb, fake_instance)
         mock_openai_cls.assert_called_once()
         _, kwargs = mock_openai_cls.call_args
-        self.assertIn("model_kwargs", kwargs)
-
-        model_kwargs = kwargs["model_kwargs"]
-        self.assertEqual(model_kwargs["model"], "text-embedding-3-small")
-        self.assertEqual(model_kwargs["api_key"], "sk-test")
-        self.assertNotIn("base_url", model_kwargs)
+        self.assertEqual(kwargs["model"], "text-embedding-3-small")
+        self.assertEqual(kwargs["api_key"].get_secret_value(), "sk-test")
+        self.assertIsNone(kwargs["base_url"])
 
     @patch("src.indexing.embeddings.OpenAIEmbeddings")
     def test_get_embeddings_openai_with_base_url(self, mock_openai_cls):
@@ -109,15 +106,13 @@ class TestGetEmbeddings(unittest.TestCase):
         self.assertIs(emb, fake_instance)
         mock_openai_cls.assert_called_once()
         _, kwargs = mock_openai_cls.call_args
-
-        model_kwargs = kwargs["model_kwargs"]
-        self.assertEqual(model_kwargs["model"], "text-embedding-3-small")
-        self.assertEqual(model_kwargs["api_key"], "sk-test")
-        self.assertEqual(model_kwargs["base_url"], "http://localhost:8000/v1")
+        self.assertEqual(kwargs["model"], "text-embedding-3-small")
+        self.assertEqual(kwargs["api_key"].get_secret_value(), "sk-test")
+        self.assertEqual(kwargs["base_url"], "http://localhost:8000/v1")
 
     @patch("src.indexing.embeddings.OpenAIEmbeddings")
     def test_get_embeddings_openai_base_url_empty_string_not_added(self, mock_openai_cls):
-        """Test empty base_url str value (should use OPENAI API URL)"""
+        """Test empty base_url str value"""
         fake_instance = MagicMock(name="OpenAIEmbeddingsInstance")
         mock_openai_cls.return_value = fake_instance
 
@@ -131,8 +126,9 @@ class TestGetEmbeddings(unittest.TestCase):
         self.assertIs(emb, fake_instance)
         mock_openai_cls.assert_called_once()
         _, kwargs = mock_openai_cls.call_args
-        model_kwargs = kwargs["model_kwargs"]
-        self.assertNotIn("base_url", model_kwargs)
+        self.assertEqual(kwargs["model"], "text-embedding-3-small")
+        self.assertEqual(kwargs["api_key"].get_secret_value(), "sk-test")
+        self.assertEqual(kwargs["base_url"], "")
 
     # -------------------------
     # HF branch

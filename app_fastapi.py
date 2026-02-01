@@ -1,25 +1,35 @@
 """
-This is the main Chainlit application file. 
-It initializes the RAG service and handles chat events. 
-Environment variables are loaded from a .env file.
-Please refer to the README for setup instructions. 
+This module contain the FastAPI application entrypoint for the RAG service.
+It mirrors the Chainlit setup: the vectorstore is built/loaded on startup
+and the RAG endpoint is unavailable until initialization completes.
+
+Start to run the Fast API app : 
+python3 -m uvicorn app_fastapi:app --reload
+
+Query the RAG service:
+curl -X POST http://127.0.0.1:8000/rag \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"<your-query>\"}"
 """
 
 import os
 from typing import Optional, overload, Literal, List
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, SecretStr
 from langchain_openai import ChatOpenAI
 from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
-from pydantic import SecretStr
-import chainlit as cl
+
 from src.indexing.embeddings import get_embeddings
 from src.indexing.faiss_store import load_store
 from src.indexing.create_database import create_database
 from src.rag.rag_service import RAGService
 
 load_dotenv()
+
+app = FastAPI()
 
 _RAG_INSTANCE: Optional[RAGService] = None
 _RAG_ERROR: Optional[Exception] = None
@@ -32,8 +42,10 @@ def _get_env(keys: list[str], default: str, required: Literal[True, False] = Fal
 @overload
 def _get_env(keys: list[str], default: None = None, required: Literal[True] = True) -> str: ...
 
+
 @overload
 def _get_env(keys: list[str], default: Optional[str] = None, required: Literal[False] = False) -> str | None: ...
+
 
 @overload
 def _get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None: ...
@@ -42,7 +54,7 @@ def _get_env(keys: list[str], default: Optional[str] = None, required: bool = Fa
 def _get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None:
     """
     Get environment variable from a list of possible keys.
-    
+
     :param keys: List of possible environment variable keys
     :type keys: list[str]
     :param default: Default value if no environment variable is found
@@ -59,7 +71,6 @@ def _get_env(keys: list[str], default: Optional[str] = None, required: bool = Fa
     if required and default is None:
         raise ValueError(f"Missing environment variable: {keys[0]}")
     return default
-
 
 def get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None:
     """
@@ -109,6 +120,7 @@ def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> L
     :type default: Optional[List[str]]
     :return: A list of strings.
     :rtype: List[str]
+    
     """
     if value is None:
         return default if default is not None else []
@@ -119,11 +131,10 @@ def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> L
 def _init_rag() -> RAGService:
     """
     Initialize the RAG service from environment variables.
-    
+
     :return: Initialized RAG service
     :rtype: RAGService
     """
-    # Embedding model initialization
     strategy: str = _get_env(["STRATEGY", "strategy"], None, True)
     embeddings_model: str = _get_env(["EMBEDDINGS_MODEL", "EMBEDDING_MODEL", "model"], None, True)
     api_key: str = _get_env(["OPENAI_API_KEY", "api_key"], None, True)
@@ -136,7 +147,6 @@ def _init_rag() -> RAGService:
         base_url=base_url,
     )
 
-    # Get database
     from_scratch: bool = _parse_bool(
         _get_env(["FROM_SCRATCH", "from_scratch"], None, False),
         default=True,
@@ -148,7 +158,7 @@ def _init_rag() -> RAGService:
         _get_env(["COLUMNS_TO_DROP", "columns_to_drop"], None, False),
         default=[],
     )
-    
+
     vectorstore: FAISS
     if from_scratch:
         vectorstore = create_database(
@@ -156,11 +166,10 @@ def _init_rag() -> RAGService:
             columns_to_drop=columns_to_drop,
             embeddings=embeddings,
             index_path=index_path,
-            index_name=index_name
+            index_name=index_name,
         )
     else:
-        vectorstore=load_store(embeddings=embeddings, path=index_path, index_name=index_name)
-
+        vectorstore = load_store(embeddings=embeddings, path=index_path, index_name=index_name)
 
     chat_model = _get_env(["CHAT_MODEL", "LLM_MODEL"], "gpt-3.5-turbo", True)
     llm = ChatOpenAI(model=chat_model, api_key=SecretStr(api_key), base_url=base_url, temperature=0)
@@ -169,10 +178,10 @@ def _init_rag() -> RAGService:
     return RAGService(llm=llm, vectorstore=vectorstore, k=k)
 
 
-@cl.on_app_startup
+@app.on_event("startup")
 def on_app_startup() -> None:
     """
-    Build/load the vectorstore once at app startup so users cannot chat before it's ready.
+    Build/load the vectorstore once at app startup so the endpoint is blocked until ready.
     """
     global _RAG_INSTANCE, _RAG_ERROR
     try:
@@ -183,48 +192,38 @@ def on_app_startup() -> None:
         _RAG_ERROR = exc
 
 
-@cl.on_chat_start
-async def on_chat_start() -> None:
-    cl.user_session.set("rag_ready", False)
-
-    if _RAG_ERROR is not None:
-        await cl.Message(
-            content=f"RAG startup error: {_RAG_ERROR}"
-        ).send()
-        return
-
-    if _RAG_INSTANCE is None:
-        await cl.Message(
-            content="We are currently learning the books, please wait."
-        ).send()
-        return
-
-    cl.user_session.set("rag", _RAG_INSTANCE)
-    cl.user_session.set("rag_ready", True)
-    await cl.Message(
-        content="Hi! What do you want to read?"
-    ).send()
+class RagRequest(BaseModel):
+    query: str
 
 
-@cl.on_message
-async def on_message(message: cl.Message) -> None:
+class RagResponse(BaseModel):
+    response: str
+
+
+@app.post("/rag", response_model=RagResponse)
+async def rag_endpoint(payload: RagRequest) -> RagResponse:
     """
-    Chat message event handler.
+    Call the endpoint with a query (string) and obtain 
+    the RAG response.
     
-    :param message: Message sent by the user
-    :type message: cl.Message
+    :param payload: User request
+    :type payload: RagRequest
+    :return: Description
+    :rtype: RagResponse
     """
-    rag_ready = cl.user_session.get("rag_ready")
-    if not rag_ready:
-        await cl.Message(
-            content="We are currently learning the books, please wait."
-        ).send()
-        return
+    # Check if it runs properly
+    if _RAG_ERROR is not None:
+        raise HTTPException(status_code=500, detail=f"RAG startup error: {_RAG_ERROR}")
 
-    rag: RAGService = cl.user_session.get("rag")
+    # Check if the vectorstore is ready
+    if _RAG_INSTANCE is None:
+        raise HTTPException(status_code=503, detail="We are currently learning the books, please wait.")
+
+    # Try to call the RAG instance
     try:
-        result = rag.answer_query(message.content)
+        result = _RAG_INSTANCE.answer_query(payload.query)
         response = result["response"]
     except Exception as exc:
-        response = f"RAG error: {exc}"
-    await cl.Message(content=response).send()
+        raise HTTPException(status_code=500, detail=f"RAG error: {exc}") from exc
+
+    return RagResponse(response=response)
