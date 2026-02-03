@@ -1,27 +1,26 @@
 """
-This is the main Chainlit application file. 
-It initializes the RAG service and handles chat events. 
+This is the main Chainlit application file.
+It proxies user queries to the FastAPI RAG endpoint and handles chat events.
 Environment variables are loaded from a .env file.
-Please refer to the README for setup instructions. 
+Please refer to the README for setup instructions.
+
+Command to run the Chainlit app:
+chainlit run app_chainlit.py --port 8080
 """
 
+import asyncio
+import json
 import os
-from typing import Optional, overload, Literal, List
-from dotenv import load_dotenv
+import urllib.error
+import urllib.request
+from typing import Optional, overload, Literal
 
-from langchain_openai import ChatOpenAI
-from langchain_core.embeddings import Embeddings
-from langchain_community.vectorstores import FAISS
-from pydantic import SecretStr
+from dotenv import load_dotenv
 import chainlit as cl
-from src.indexing.embeddings import get_embeddings
-from src.indexing.faiss_store import load_store
-from src.indexing.create_database import create_database
-from src.rag.rag_service import RAGService
 
 load_dotenv()
 
-_RAG_INSTANCE: Optional[RAGService] = None
+_RAG_ENDPOINT: Optional[str] = None
 _RAG_ERROR: Optional[Exception] = None
 
 
@@ -78,108 +77,96 @@ def get_env(keys: list[str], default: Optional[str] = None, required: bool = Fal
     return _get_env(keys, default, required)
 
 
-def _parse_bool(value: str | None, default: bool = False) -> bool:
+def _resolve_rag_endpoint() -> str:
     """
-    Parse common truthy/falsey strings into a boolean.
+    Resolve the RAG FastAPI endpoint from environment variables.
     
-    :param value: The string to be parsed into a boolean.
-    :type value: str | None
-    :param default: The default value returned if the input string is invalid.
-    :type default: bool
-    :return: The parsed boolean value.
-    :rtype: bool
+    :return: The RAG endpoint URL
+    :rtype: str
     """
-    if value is None:
-        return default
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    raise ValueError(f"Invalid boolean value: {value}")
+    endpoint = _get_env(
+        ["RAG_ENDPOINT", "RAG_API_URL", "FASTAPI_URL"],
+        "http://127.0.0.1:8000/rag",
+        True,
+    )
+    return endpoint
 
 
-def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> List[str]:
+def _sync_post_json(url: str, payload: dict, timeout_seconds: float) -> tuple[int, str]:
     """
-    Parse a comma-separated string into a list.
-
-    :param value: A comma-separated string of values.
-    :type value: str | None
-    :param default: The default value to return if the input is None.
-    :type default: Optional[List[str]]
-    :return: A list of strings.
-    :rtype: List[str]
-    """
-    if value is None:
-        return default if default is not None else []
-    items = [item.strip() for item in value.split(",")]
-    return [item for item in items if item]
-
-
-def _init_rag() -> RAGService:
-    """
-    Initialize the RAG service from environment variables.
+    Synchronous helper to post JSON data.
     
-    :return: Initialized RAG service
-    :rtype: RAGService
+    :param url: The URL to send the POST request to
+    :type url: str
+    :param payload: The JSON payload to send in the request body
+    :type payload: dict
+    :param timeout_seconds: The timeout for the request in seconds
+    :type timeout_seconds: float
+    :return: A tuple containing the HTTP status code and the response body as a string
+    :rtype: tuple[int, str]
     """
-    # Embedding model initialization
-    strategy: str = _get_env(["STRATEGY", "strategy"], None, True)
-    embeddings_model: str = _get_env(["EMBEDDINGS_MODEL", "EMBEDDING_MODEL", "model"], None, True)
-    api_key: str = _get_env(["OPENAI_API_KEY", "api_key"], None, True)
-    base_url: Optional[str] = _get_env(["OPENAI_BASE_URL", "base_url"], None, False)
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            return response.getcode(), response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8")
 
-    embeddings: Embeddings = get_embeddings(
-        strategy=strategy,
-        model=embeddings_model,
-        api_key=api_key,
-        base_url=base_url,
-    )
 
-    # Get database
-    from_scratch: bool = _parse_bool(
-        _get_env(["FROM_SCRATCH", "from_scratch"], None, False),
-        default=True,
-    )
-    index_path: str = _get_env(["FAISS_INDEX_PATH", "INDEX_PATH"], "/data/faiss_index/", True)
-    index_name: str = _get_env(["FAISS_INDEX_NAME", "INDEX_NAME"], "books_index", True)
-    data_path: str = _get_env(["DATA_PATH", "data_path"], "/data/books.csv", False)
-    columns_to_drop: List[str] = _parse_csv_list(
-        _get_env(["COLUMNS_TO_DROP", "columns_to_drop"], None, False),
-        default=[],
-    )
+async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) -> str:
+    """
+    Call the RAG FastAPI endpoint asynchronously.
     
-    vectorstore: FAISS
-    if from_scratch:
-        vectorstore = create_database(
-            data_path=data_path,
-            columns_to_drop=columns_to_drop,
-            embeddings=embeddings,
-            index_path=index_path,
-            index_name=index_name
-        )
+    :param endpoint: The RAG endpoint URL
+    :type endpoint: str
+    :param query: The query string to send to the RAG endpoint
+    :type query: str
+    :param timeout_seconds: The timeout for the request in seconds
+    :type timeout_seconds: float
+    :return: The response from the RAG endpoint
+    :rtype: str
+    """
+    status, body = await asyncio.to_thread(
+        _sync_post_json,
+        endpoint,
+        {"query": query},
+        timeout_seconds,
+    )
+    if body:
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = {}
     else:
-        vectorstore=load_store(embeddings=embeddings, path=index_path, index_name=index_name)
+        payload = {}
 
+    if status >= 400:
+        detail = payload.get("detail", body or f"HTTP {status}")
+        raise RuntimeError(f"API error ({status}): {detail}")
 
-    chat_model = _get_env(["CHAT_MODEL", "LLM_MODEL"], "gpt-3.5-turbo", True)
-    llm = ChatOpenAI(model=chat_model, api_key=SecretStr(api_key), base_url=base_url, temperature=0)
-    k = int(_get_env(["RETRIEVER_K", "K"], "5"))
-
-    return RAGService(llm=llm, vectorstore=vectorstore, k=k)
+    response = payload.get("response")
+    if not response:
+        raise RuntimeError("Malformed response from API")
+    return response
 
 
 @cl.on_app_startup
 def on_app_startup() -> None:
     """
-    Build/load the vectorstore once at app startup so users cannot chat before it's ready.
+    Resolve the FastAPI endpoint once at startup.
     """
-    global _RAG_INSTANCE, _RAG_ERROR
+    global _RAG_ENDPOINT, _RAG_ERROR
     try:
-        _RAG_INSTANCE = _init_rag()
+        _RAG_ENDPOINT = _resolve_rag_endpoint()
         _RAG_ERROR = None
     except Exception as exc:
-        _RAG_INSTANCE = None
+        _RAG_ENDPOINT = None
         _RAG_ERROR = exc
 
 
@@ -193,13 +180,13 @@ async def on_chat_start() -> None:
         ).send()
         return
 
-    if _RAG_INSTANCE is None:
+    if _RAG_ENDPOINT is None:
         await cl.Message(
-            content="We are currently learning the books, please wait."
+            content="RAG endpoint is not configured yet."
         ).send()
         return
 
-    cl.user_session.set("rag", _RAG_INSTANCE)
+    cl.user_session.set("rag_endpoint", _RAG_ENDPOINT)
     cl.user_session.set("rag_ready", True)
     await cl.Message(
         content="Hi! What do you want to read?"
@@ -221,10 +208,10 @@ async def on_message(message: cl.Message) -> None:
         ).send()
         return
 
-    rag: RAGService = cl.user_session.get("rag")
+    endpoint: str = cl.user_session.get("rag_endpoint")
+    timeout_seconds = float(_get_env(["RAG_TIMEOUT_SECONDS", "TIMEOUT_SECONDS"], "30"))
     try:
-        result = rag.answer_query(message.content)
-        response = result["response"]
+        response = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
     except Exception as exc:
         response = f"RAG error: {exc}"
     await cl.Message(content=response).send()
