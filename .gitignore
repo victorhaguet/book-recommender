@@ -6,3 +6,7 @@ __pycache__/
 
 # Settings
 .env
+
+.chainlit/
+
+venv/
