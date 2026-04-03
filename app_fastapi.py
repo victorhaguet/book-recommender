@@ -151,9 +151,9 @@ def _init_rag() -> RAGService:
         _get_env(["FROM_SCRATCH", "from_scratch"], None, False),
         default=True,
     )
-    index_path: str = _get_env(["FAISS_INDEX_PATH", "INDEX_PATH"], "/data/faiss_index/", True)
+    index_path: str = _get_env(["FAISS_INDEX_PATH", "INDEX_PATH"], "data/faiss_index/", True)
     index_name: str = _get_env(["FAISS_INDEX_NAME", "INDEX_NAME"], "books_index", True)
-    data_path: str = _get_env(["DATA_PATH", "data_path"], "/data/books.csv", False)
+    data_path: str = _get_env(["DATA_PATH", "data_path"], "data/books.csv", False)
     columns_to_drop: List[str] = _parse_csv_list(
         _get_env(["COLUMNS_TO_DROP", "columns_to_drop"], None, False),
         default=[],
