@@ -35,14 +35,14 @@ Main files:
 - [app_chainlit.py](app_chainlit.py): Chainlit frontend entrypoint
 - [src/ingestion/load_books.py](src/ingestion/load_books.py): CSV loading and cleaning
 - [src/indexing/create_database.py](src/indexing/create_database.py): index creation pipeline
-- [src/indexing/embeddings.py](/src/indexing/embeddings.py): embedding backend selection
+- [src/indexing/embeddings.py](src/indexing/embeddings.py): embedding backend selection
 - [src/indexing/retriever.py](src/indexing/retriever.py): retriever setup
 - [src/rag/chain.py](src/rag/chain.py): core RAG chain
 - [src/rag/rag_service.py](src/rag/rag_service.py): service orchestration
 
 ## Data
 
-The repository includes a dataset at [data/books.csv](/home/victorhaguet/projects/private/book-rag/data/books.csv).
+The repository includes a dataset at [data/books.csv](data/books.csv).
 
 The ingestion layer assumes:
 - the source is a CSV file
@@ -56,8 +56,8 @@ By default, the example configuration drops:
 
 Rows with missing descriptions are removed during ingestion.
 
-After the first run, the vector store is saved in the data folder: [/data/faiss_index/books_index.faiss](/data/faiss_index/books_index.faiss). 
-For subsequent runs, the FAISS vector store will be downloaded automatically, thus avoiding the need to create it again. 
+By default, the FAISS index is stored under [data/faiss_index](data/faiss_index).
+If `FROM_SCRATCH=false`, the backend loads the existing index from that folder instead of rebuilding it.
 
 ## Requirements
 
@@ -90,7 +90,7 @@ Important environment variables:
 | `RETRIEVER_K` | Number of retrieved books per query |
 | `RAG_ENDPOINT` | Backend endpoint used by Chainlit |
 
-Default example values live in [.env.example](/home/victorhaguet/projects/private/book-rag/.env.example).
+Default example values live in [.env.example](.env.example).
 
 ## Local Development
 
@@ -155,6 +155,13 @@ The Compose setup starts:
 - `backend` on port `8000`
 - `frontend` on port `8080`
 
+Both services are built from a single multi-stage [Dockerfile](Dockerfile):
+- the `base` stage installs shared Python dependencies once
+- the `backend` target runs FastAPI
+- the `frontend` target runs Chainlit
+
+By default, the backend reads the dataset and FAISS index from the `data/` directory. You can override these paths with environment variables if needed.
+
 The frontend waits for the backend health check before starting.
 
 ## API Usage
@@ -191,11 +198,11 @@ When started, it:
 - forwards user messages to the `/rag` endpoint
 - displays the generated recommendation text in the chat UI
 
-The welcome screen content is defined in [chainlit.md](/home/victorhaguet/projects/private/book-rag/chainlit.md).
+The welcome screen content is defined in [chainlit.md](chainlit.md).
 
 ## Testing
 
-The project contains Python unit tests under [tests](/home/victorhaguet/projects/private/book-rag/tests).
+The project contains Python unit tests under [tests](tests).
 
 Coverage includes:
 - ingestion
