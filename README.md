@@ -198,8 +198,6 @@ When started, it:
 - forwards user messages to the `/rag` endpoint
 - displays the generated recommendation text in the chat UI
 
-The welcome screen content is defined in [chainlit.md](chainlit.md).
-
 ## Testing
 
 The project contains Python unit tests under [tests](tests).
@@ -219,6 +217,24 @@ Run everything with:
 ```bash
 make test
 ```
+
+## Continuous Integration
+
+The repository includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+It runs automatically:
+- on pushes to `main`
+- on pull requests
+
+The CI currently checks:
+- Python dependency installation through `make install`
+- the full Python test suite through `make test`
+- Docker image builds for both the `backend` and `frontend` targets
+
+You can view the result:
+- in the repository `Actions` tab
+- on each pull request through the status checks
+- on commits through the GitHub check status icons
 
 ## Example Workflow
 
