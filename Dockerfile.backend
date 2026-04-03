@@ -15,7 +15,6 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY app_fastapi.py /app/app_fastapi.py
 COPY src /app/src
 COPY data /app/data
-COPY indexes /app/indexes
 
 EXPOSE 8000
 

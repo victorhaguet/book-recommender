@@ -11,7 +11,6 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./indexes:/app/indexes
     healthcheck:
       test:
         [
