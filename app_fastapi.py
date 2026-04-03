@@ -200,6 +200,22 @@ class RagResponse(BaseModel):
     response: str
 
 
+class HealthResponse(BaseModel):
+    status: str
+
+
+@app.get("/health", response_model=HealthResponse)
+async def health_endpoint() -> HealthResponse:
+    """
+    Healthcheck endpoint for container readiness.
+    """
+    if _RAG_ERROR is not None:
+        raise HTTPException(status_code=500, detail=f"RAG startup error: {_RAG_ERROR}")
+    if _RAG_INSTANCE is None:
+        raise HTTPException(status_code=503, detail="We are currently learning the books, please wait.")
+    return HealthResponse(status="ok")
+
+
 @app.post("/rag", response_model=RagResponse)
 async def rag_endpoint(payload: RagRequest) -> RagResponse:
     """
