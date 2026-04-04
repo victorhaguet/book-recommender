@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 FROM base AS backend
 
 COPY app_fastapi.py /app/app_fastapi.py
+COPY conf /app/conf
 COPY src /app/src
 COPY data /app/data
 
@@ -25,6 +26,8 @@ CMD ["python", "-m", "uvicorn", "app_fastapi:app", "--host", "0.0.0.0", "--port"
 FROM base AS frontend
 
 COPY app_chainlit.py /app/app_chainlit.py
+COPY conf /app/conf
+COPY src /app/src
 
 EXPOSE 8080
 
