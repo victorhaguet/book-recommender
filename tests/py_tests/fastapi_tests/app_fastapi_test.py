@@ -1,10 +1,44 @@
 """Tests for the FastAPI application entrypoint."""
 import importlib
 import os
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
 app_fastapi = importlib.import_module("app_fastapi")
+
+
+def _build_config(
+    *,
+    strategy: str = "openai",
+    embeddings_model: str = "embedding-model",
+    base_url=None,
+    from_scratch: bool = False,
+    data_path: str = "data/books.csv",
+    columns_to_drop=None,
+    index_path: str = "/tmp/index",
+    index_name: str = "books_index",
+    chat_model: str = "gpt-3.5-turbo",
+    retriever_k: int = 5,
+):
+    return SimpleNamespace(
+        embeddings=SimpleNamespace(
+            strategy=strategy,
+            model=embeddings_model,
+            base_url=base_url,
+        ),
+        index=SimpleNamespace(
+            from_scratch=from_scratch,
+            data_path=data_path,
+            columns_to_drop=columns_to_drop or ["isbn13", "isbn10"],
+            path=index_path,
+            name=index_name,
+        ),
+        rag=SimpleNamespace(
+            chat_model=chat_model,
+            retriever_k=retriever_k,
+        ),
+    )
 
 
 class TestAppFastapi(unittest.TestCase):
@@ -24,8 +58,10 @@ class TestAppFastapi(unittest.TestCase):
     @patch("app_fastapi.ChatOpenAI")
     @patch("app_fastapi.load_store")
     @patch("app_fastapi.get_embeddings")
+    @patch("app_fastapi.load_settings")
     def test_init_rag_builds_dependencies(
         self,
+        mock_load_settings,
         mock_get_embeddings,
         mock_load_store,
         mock_chat_openai,
@@ -41,16 +77,12 @@ class TestAppFastapi(unittest.TestCase):
         mock_load_store.return_value = mock_vectorstore
         mock_chat_openai.return_value = mock_llm
         mock_rag_service.return_value = mock_rag
+        mock_load_settings.return_value = _build_config()
 
         with patch.dict(
             os.environ,
             {
-                "STRATEGY": "openai",
-                "EMBEDDINGS_MODEL": "embedding-model",
                 "OPENAI_API_KEY": "test-key",
-                "FROM_SCRATCH": "false",
-                "FAISS_INDEX_PATH": "/tmp/index",
-                "FAISS_INDEX_NAME": "books_index",
             },
             clear=True,
         ):
@@ -81,10 +113,13 @@ class TestAppFastapi(unittest.TestCase):
         )
 
     @patch("app_fastapi._init_rag")
-    def test_on_app_startup_sets_globals(self, mock_init_rag):
+    @patch("app_fastapi.load_settings")
+    def test_on_app_startup_sets_globals(self, mock_load_settings, mock_init_rag):
         """Test globals setup."""
         mock_rag = MagicMock(name="RAGService")
         mock_init_rag.return_value = mock_rag
+        mock_load_settings.return_value = _build_config()
+        app_fastapi._APP_CONFIG = None
 
         app_fastapi._RAG_INSTANCE = None
         app_fastapi._RAG_ERROR = None
@@ -92,6 +127,7 @@ class TestAppFastapi(unittest.TestCase):
 
         self.assertIs(app_fastapi._RAG_INSTANCE, mock_rag)
         self.assertIsNone(app_fastapi._RAG_ERROR)
+        self.assertIsNotNone(app_fastapi._APP_CONFIG)
 
 
 class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
