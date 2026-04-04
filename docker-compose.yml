@@ -34,7 +34,7 @@ services:
     env_file:
       - .env
     environment:
-      RAG_ENDPOINT: http://backend:8000/rag
+      APP_ENV: docker
     depends_on:
       backend:
         condition: service_healthy

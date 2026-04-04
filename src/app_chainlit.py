@@ -5,7 +5,7 @@ Environment variables are loaded from a .env file.
 Please refer to the README for setup instructions.
 
 Command to run the Chainlit app:
-chainlit run app_chainlit.py --port 8080
+chainlit run src/app_chainlit.py --port 8080
 """
 
 import asyncio
@@ -17,7 +17,9 @@ from typing import Optional, overload, Literal
 
 from dotenv import load_dotenv
 import chainlit as cl
+from omegaconf import DictConfig
 
+from src.app_config import load_settings
 from src.logging_utils import get_logger, summarize_text
 
 load_dotenv()
@@ -26,6 +28,7 @@ logger = get_logger(__name__)
 
 _RAG_ENDPOINT: Optional[str] = None
 _RAG_ERROR: Optional[Exception] = None
+_APP_CONFIG: Optional[DictConfig] = None
 
 
 @overload
@@ -88,11 +91,8 @@ def _resolve_rag_endpoint() -> str:
     :return: The RAG endpoint URL
     :rtype: str
     """
-    endpoint = _get_env(
-        ["RAG_ENDPOINT", "RAG_API_URL", "FASTAPI_URL"],
-        "http://127.0.0.1:8000/rag",
-        True,
-    )
+    config = load_settings()
+    endpoint = config.frontend.rag_endpoint
     logger.info("Resolved Chainlit RAG endpoint to '%s'", endpoint)
     return endpoint
 
@@ -169,13 +169,15 @@ def on_app_startup() -> None:
     """
     Resolve the FastAPI endpoint once at startup.
     """
-    global _RAG_ENDPOINT, _RAG_ERROR
+    global _RAG_ENDPOINT, _RAG_ERROR, _APP_CONFIG
     logger.info("Chainlit startup: resolving backend endpoint")
     try:
-        _RAG_ENDPOINT = _resolve_rag_endpoint()
+        _APP_CONFIG = load_settings()
+        _RAG_ENDPOINT = _APP_CONFIG.frontend.rag_endpoint
         _RAG_ERROR = None
         logger.info("Chainlit startup completed successfully")
     except Exception as exc:
+        _APP_CONFIG = None
         _RAG_ENDPOINT = None
         _RAG_ERROR = exc
         logger.exception("Chainlit startup failed")
@@ -226,7 +228,7 @@ async def on_message(message: cl.Message) -> None:
         return
 
     endpoint: str = cl.user_session.get("rag_endpoint")
-    timeout_seconds = float(_get_env(["RAG_TIMEOUT_SECONDS", "TIMEOUT_SECONDS"], "30"))
+    timeout_seconds = 30.0 if _APP_CONFIG is None else float(_APP_CONFIG.frontend.timeout_seconds)
     try:
         response = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
     except Exception as exc:

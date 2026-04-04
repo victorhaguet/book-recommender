@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 import types
+from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -41,7 +42,16 @@ def _install_chainlit_stub() -> None:
 
 
 _install_chainlit_stub()
-app_chainlit = importlib.import_module("app_chainlit")
+app_chainlit = importlib.import_module("src.app_chainlit")
+
+
+def _build_config(endpoint: str = "http://127.0.0.1:8000/rag", timeout_seconds: float = 30.0):
+    return SimpleNamespace(
+        frontend=SimpleNamespace(
+            rag_endpoint=endpoint,
+            timeout_seconds=timeout_seconds,
+        )
+    )
 
 
 class TestAppChainlit(unittest.TestCase):
@@ -59,17 +69,15 @@ class TestAppChainlit(unittest.TestCase):
 
     def test_on_app_startup_sets_globals(self):
         """Test globals setup"""
-        with patch.dict(
-            os.environ,
-            {"RAG_ENDPOINT": "http://127.0.0.1:8000/rag"},
-            clear=True,
-        ):
+        with patch("src.app_chainlit.load_settings", return_value=_build_config()):
             app_chainlit._RAG_ENDPOINT = None
             app_chainlit._RAG_ERROR = None
+            app_chainlit._APP_CONFIG = None
             app_chainlit.on_app_startup()
 
         self.assertEqual(app_chainlit._RAG_ENDPOINT, "http://127.0.0.1:8000/rag")
         self.assertIsNone(app_chainlit._RAG_ERROR)
+        self.assertIsNotNone(app_chainlit._APP_CONFIG)
 
 
 class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
@@ -80,9 +88,10 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
         app_chainlit._RAG_ENDPOINT = "http://127.0.0.1:8000/rag"
         app_chainlit._RAG_ERROR = None
+        app_chainlit._APP_CONFIG = _build_config()
 
-        with patch("app_chainlit.cl.user_session.set") as mock_set, patch(
-            "app_chainlit.cl.Message", return_value=message_instance
+        with patch("src.app_chainlit.cl.user_session.set") as mock_set, patch(
+            "src.app_chainlit.cl.Message", return_value=message_instance
         ) as mock_msg:
             await app_chainlit.on_chat_start()
 
@@ -97,14 +106,15 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
         message_instance.send = AsyncMock()
         incoming = MagicMock()
         incoming.content = "hello"
+        app_chainlit._APP_CONFIG = _build_config()
 
         with patch(
-            "app_chainlit.cl.user_session.get",
+            "src.app_chainlit.cl.user_session.get",
             side_effect=[True, "http://127.0.0.1:8000/rag"],
         ), patch(
-            "app_chainlit._call_rag_endpoint",
+            "src.app_chainlit._call_rag_endpoint",
             return_value="ok",
-        ), patch("app_chainlit.cl.Message", return_value=message_instance) as mock_message:
+        ), patch("src.app_chainlit.cl.Message", return_value=message_instance) as mock_message:
             await app_chainlit.on_message(incoming)
 
         message_instance.send.assert_awaited_once()
@@ -116,14 +126,15 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
         message_instance.send = AsyncMock()
         incoming = MagicMock()
         incoming.content = "hello"
+        app_chainlit._APP_CONFIG = _build_config()
 
         with patch(
-            "app_chainlit.cl.user_session.get",
+            "src.app_chainlit.cl.user_session.get",
             side_effect=[True, "http://127.0.0.1:8000/rag"],
         ), patch(
-            "app_chainlit._call_rag_endpoint",
+            "src.app_chainlit._call_rag_endpoint",
             side_effect=RuntimeError("boom"),
-        ), patch("app_chainlit.cl.Message", return_value=message_instance) as mock_message:
+        ), patch("src.app_chainlit.cl.Message", return_value=message_instance) as mock_message:
             await app_chainlit.on_message(incoming)
 
         mock_message.assert_called_once_with(content="RAG error: boom")

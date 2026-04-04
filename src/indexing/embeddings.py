@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 def get_embeddings(
         strategy: str,
         model: str,
-        api_key: Optional[str] = None, 
+        api_key: Optional[SecretStr] = None,
         base_url: Optional[str] = None
     )->Embeddings:
     """
@@ -49,14 +49,14 @@ def get_embeddings(
 
     if strategy == "openai":
         # Check if the api_key is instantiate
-        if not api_key or not isinstance(api_key, str):
+        if not isinstance(api_key, SecretStr) or not api_key.get_secret_value():
             raise ValueError("Missing API key for OpenAI embeddings strategy")
 
         # Instantiate OpenAIEmbeddings
         logger.info("Using OpenAI-compatible embeddings backend")
         return OpenAIEmbeddings(
             model = model,
-            api_key= SecretStr(api_key),
+            api_key=api_key,
             base_url= base_url
         )
 

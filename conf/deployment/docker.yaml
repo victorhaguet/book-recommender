@@ -1,0 +1,2 @@
+frontend:
+  rag_endpoint: http://backend:8000/rag # Call backendservice

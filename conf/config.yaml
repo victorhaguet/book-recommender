@@ -1,0 +1,38 @@
+
+# Deployment method configuration
+defaults:
+  - deployment: local # Select the deployment configuration (local or docker)
+  - _self_
+
+# Embedding model configuration
+embeddings:
+  strategy: openai # Select the embedding strategy (openai or sentence_transformers)
+  model: text-embedding-3-small
+  base_url: null # Optional base URL for OpenAI-compatible embedding API services
+
+# Index configuration
+index:
+  from_scratch: false # If true, the index will be created from scratch, otherwise it will try to load an existing index
+  data_path: data/books.csv
+  columns_to_drop:
+    - isbn13
+    - isbn10
+    - thumbnail
+  # The path where the FAISS index will be stored and the name of the index
+  path: data/faiss_index/
+  name: books_index
+
+# LLM configuration
+llm:
+  provider: openai # Only OpenAI and OpenAI-compatible chat providers are supported
+  model: gpt-3.5-turbo
+  base_url: null # Optional base URL for OpenAI-compatible chat API services
+
+# RAG configuration
+rag:
+  retriever_k: 5 # Number of chunks to retrieve.
+
+# Frontend configuration
+frontend:
+  timeout_seconds: 30
+  rag_endpoint: http://127.0.0.1:8000/rag

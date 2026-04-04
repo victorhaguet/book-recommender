@@ -1,10 +1,51 @@
 """Tests for the FastAPI application entrypoint."""
 import importlib
 import os
+from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
+from pydantic import SecretStr
 
-app_fastapi = importlib.import_module("app_fastapi")
+app_fastapi = importlib.import_module("src.app_fastapi")
+
+
+def _build_config(
+    *,
+    strategy: str = "openai",
+    embeddings_model: str = "embedding-model",
+    embeddings_base_url=None,
+    from_scratch: bool = False,
+    data_path: str = "data/books.csv",
+    columns_to_drop=None,
+    index_path: str = "/tmp/index",
+    index_name: str = "books_index",
+    llm_provider: str = "openai",
+    llm_model: str = "gpt-3.5-turbo",
+    llm_base_url=None,
+    retriever_k: int = 5,
+):
+    return SimpleNamespace(
+        embeddings=SimpleNamespace(
+            strategy=strategy,
+            model=embeddings_model,
+            base_url=embeddings_base_url,
+        ),
+        index=SimpleNamespace(
+            from_scratch=from_scratch,
+            data_path=data_path,
+            columns_to_drop=columns_to_drop or ["isbn13", "isbn10"],
+            path=index_path,
+            name=index_name,
+        ),
+        llm=SimpleNamespace(
+            provider=llm_provider,
+            model=llm_model,
+            base_url=llm_base_url,
+        ),
+        rag=SimpleNamespace(
+            retriever_k=retriever_k,
+        ),
+    )
 
 
 class TestAppFastapi(unittest.TestCase):
@@ -20,12 +61,14 @@ class TestAppFastapi(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app_fastapi.get_env(["MISSING"], None, True)
 
-    @patch("app_fastapi.RAGService")
-    @patch("app_fastapi.ChatOpenAI")
-    @patch("app_fastapi.load_store")
-    @patch("app_fastapi.get_embeddings")
+    @patch("src.app_fastapi.RAGService")
+    @patch("src.app_fastapi.ChatOpenAI")
+    @patch("src.app_fastapi.load_store")
+    @patch("src.app_fastapi.get_embeddings")
+    @patch("src.app_fastapi.load_settings")
     def test_init_rag_builds_dependencies(
         self,
+        mock_load_settings,
         mock_get_embeddings,
         mock_load_store,
         mock_chat_openai,
@@ -41,28 +84,27 @@ class TestAppFastapi(unittest.TestCase):
         mock_load_store.return_value = mock_vectorstore
         mock_chat_openai.return_value = mock_llm
         mock_rag_service.return_value = mock_rag
+        mock_load_settings.return_value = _build_config()
 
         with patch.dict(
             os.environ,
             {
-                "STRATEGY": "openai",
-                "EMBEDDINGS_MODEL": "embedding-model",
-                "OPENAI_API_KEY": "test-key",
-                "FROM_SCRATCH": "false",
-                "FAISS_INDEX_PATH": "/tmp/index",
-                "FAISS_INDEX_NAME": "books_index",
+                "OPENAI_API_KEY": "fallback-key",
+                "LLM_API_KEY": "llm-key",
+                "EMBEDDINGS_API_KEY": "emb-key",
             },
             clear=True,
         ):
             result = app_fastapi._init_rag()
 
         self.assertIs(result, mock_rag)
-        mock_get_embeddings.assert_called_once_with(
-            strategy="openai",
-            model="embedding-model",
-            api_key="test-key",
-            base_url=None,
-        )
+        mock_get_embeddings.assert_called_once()
+        embeddings_call_kwargs = mock_get_embeddings.call_args.kwargs
+        self.assertEqual(embeddings_call_kwargs["strategy"], "openai")
+        self.assertEqual(embeddings_call_kwargs["model"], "embedding-model")
+        self.assertIsInstance(embeddings_call_kwargs["api_key"], SecretStr)
+        self.assertEqual(embeddings_call_kwargs["api_key"].get_secret_value(), "emb-key")
+        self.assertIsNone(embeddings_call_kwargs["base_url"])
         mock_load_store.assert_called_once_with(
             embeddings=mock_embeddings,
             path="/tmp/index",
@@ -73,18 +115,21 @@ class TestAppFastapi(unittest.TestCase):
         self.assertEqual(call_kwargs["model"], "gpt-3.5-turbo")
         self.assertEqual(call_kwargs["temperature"], 0)
         self.assertIsNone(call_kwargs["base_url"])
-        self.assertEqual(call_kwargs["api_key"].get_secret_value(), "test-key")
+        self.assertEqual(call_kwargs["api_key"].get_secret_value(), "llm-key")
         mock_rag_service.assert_called_once_with(
             llm=mock_llm,
             vectorstore=mock_vectorstore,
             k=5,
         )
 
-    @patch("app_fastapi._init_rag")
-    def test_on_app_startup_sets_globals(self, mock_init_rag):
+    @patch("src.app_fastapi._init_rag")
+    @patch("src.app_fastapi.load_settings")
+    def test_on_app_startup_sets_globals(self, mock_load_settings, mock_init_rag):
         """Test globals setup."""
         mock_rag = MagicMock(name="RAGService")
         mock_init_rag.return_value = mock_rag
+        mock_load_settings.return_value = _build_config()
+        app_fastapi._APP_CONFIG = None
 
         app_fastapi._RAG_INSTANCE = None
         app_fastapi._RAG_ERROR = None
@@ -92,6 +137,7 @@ class TestAppFastapi(unittest.TestCase):
 
         self.assertIs(app_fastapi._RAG_INSTANCE, mock_rag)
         self.assertIsNone(app_fastapi._RAG_ERROR)
+        self.assertIsNotNone(app_fastapi._APP_CONFIG)
 
 
 class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):

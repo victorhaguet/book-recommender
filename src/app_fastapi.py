@@ -4,7 +4,7 @@ It mirrors the Chainlit setup: the vectorstore is built/loaded on startup
 and the RAG endpoint is unavailable until initialization completes.
 
 Start to run the Fast API app : 
-python3 -m uvicorn app_fastapi:app --reload
+python3 -m uvicorn src.app_fastapi:app --reload
 
 Query the RAG service:
 curl -X POST http://127.0.0.1:8000/rag \
@@ -21,7 +21,9 @@ from pydantic import BaseModel, SecretStr
 from langchain_openai import ChatOpenAI
 from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
+from omegaconf import DictConfig
 
+from src.app_config import load_settings
 from src.indexing.embeddings import get_embeddings
 from src.indexing.faiss_store import load_store
 from src.indexing.create_database import create_database
@@ -36,6 +38,7 @@ app = FastAPI()
 
 _RAG_INSTANCE: Optional[RAGService] = None
 _RAG_ERROR: Optional[Exception] = None
+_APP_CONFIG: Optional[DictConfig] = None
 
 
 @overload
@@ -139,29 +142,48 @@ def _init_rag() -> RAGService:
     :rtype: RAGService
     """
     logger.info("Initializing FastAPI RAG dependencies from environment")
-    strategy: str = _get_env(["STRATEGY", "strategy"], None, True)
-    embeddings_model: str = _get_env(["EMBEDDINGS_MODEL", "EMBEDDING_MODEL", "model"], None, True)
-    api_key: str = _get_env(["OPENAI_API_KEY", "api_key"], None, True)
-    base_url: Optional[str] = _get_env(["OPENAI_BASE_URL", "base_url"], None, False)
+    config = load_settings()
+    strategy: str = config.embeddings.strategy
+    embeddings_model: str = config.embeddings.model
 
+    # Load API keys
+    embeddings_api_key: Optional[str] = _get_env(
+        ["EMBEDDINGS_API_KEY", "OPENAI_EMBEDDINGS_API_KEY", "OPENAI_API_KEY", "api_key"],
+        None,
+        strategy == "openai",
+    )
+    embeddings_base_url: Optional[str] = config.embeddings.base_url
+    embeddings_api_secret: Optional[SecretStr] = None
+    if embeddings_api_key is not None:
+        embeddings_api_secret = SecretStr(embeddings_api_key)
+
+    llm_provider: str = config.llm.provider.lower().strip()
+    if llm_provider != "openai":
+        raise ValueError("Only 'openai' is currently supported for the LLM provider")
+    llm_model: str = config.llm.model
+    llm_api_key: Optional[str] = _get_env(
+        ["LLM_API_KEY", "OPENAI_LLM_API_KEY", "OPENAI_API_KEY", "api_key"],
+        None,
+        True,
+    )
+    llm_base_url: Optional[str] = config.llm.base_url
+    llm_api_secret: Optional[SecretStr] = None
+    if llm_api_key is not None:
+        llm_api_secret = SecretStr(llm_api_key)
+
+    # Initialize embeddings
     embeddings: Embeddings = get_embeddings(
         strategy=strategy,
         model=embeddings_model,
-        api_key=api_key,
-        base_url=base_url,
+        api_key=embeddings_api_secret,
+        base_url=embeddings_base_url,
     )
 
-    from_scratch: bool = _parse_bool(
-        _get_env(["FROM_SCRATCH", "from_scratch"], None, False),
-        default=True,
-    )
-    index_path: str = _get_env(["FAISS_INDEX_PATH", "INDEX_PATH"], "data/faiss_index/", True)
-    index_name: str = _get_env(["FAISS_INDEX_NAME", "INDEX_NAME"], "books_index", True)
-    data_path: str = _get_env(["DATA_PATH", "data_path"], "data/books.csv", False)
-    columns_to_drop: List[str] = _parse_csv_list(
-        _get_env(["COLUMNS_TO_DROP", "columns_to_drop"], None, False),
-        default=[],
-    )
+    from_scratch: bool = bool(config.index.from_scratch)
+    index_path: str = config.index.path
+    index_name: str = config.index.name
+    data_path: str = config.index.data_path
+    columns_to_drop: List[str] = list(config.index.columns_to_drop)
 
     vectorstore: FAISS
     if from_scratch:
@@ -177,11 +199,16 @@ def _init_rag() -> RAGService:
         logger.info("Loading existing vectorstore from disk")
         vectorstore = load_store(embeddings=embeddings, path=index_path, index_name=index_name)
 
-    chat_model = _get_env(["CHAT_MODEL", "LLM_MODEL"], "gpt-3.5-turbo", True)
-    llm = ChatOpenAI(model=chat_model, api_key=SecretStr(api_key), base_url=base_url, temperature=0)
-    k = int(_get_env(["RETRIEVER_K", "K"], "5"))
+    # Initialize LLM
+    llm = ChatOpenAI(
+        model=llm_model,
+        api_key=llm_api_secret,
+        base_url=llm_base_url,
+        temperature=0,
+    )
+    k = int(config.rag.retriever_k)
 
-    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", chat_model, k)
+    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", llm_model, k)
     return RAGService(llm=llm, vectorstore=vectorstore, k=k)
 
 
@@ -190,13 +217,15 @@ def on_app_startup() -> None:
     """
     Build/load the vectorstore once at app startup so the endpoint is blocked until ready.
     """
-    global _RAG_INSTANCE, _RAG_ERROR
+    global _RAG_INSTANCE, _RAG_ERROR, _APP_CONFIG
     logger.info("FastAPI startup: preparing RAG service")
     try:
+        _APP_CONFIG = load_settings()
         _RAG_INSTANCE = _init_rag()
         _RAG_ERROR = None
         logger.info("FastAPI startup completed successfully")
     except Exception as exc:
+        _APP_CONFIG = None
         _RAG_INSTANCE = None
         _RAG_ERROR = exc
         logger.exception("FastAPI startup failed")
