@@ -57,7 +57,7 @@ By default, the example configuration drops:
 Rows with missing descriptions are removed during ingestion.
 
 By default, the FAISS index is stored under [data/faiss_index](data/faiss_index).
-If `FROM_SCRATCH=false`, the backend loads the existing index from that folder instead of rebuilding it.
+If `index.from_scratch: false`, the backend loads the existing index from that folder instead of rebuilding it.
 
 ## Requirements
 
@@ -73,24 +73,24 @@ Copy the example environment file and adapt it to your setup:
 cp .env.example .env
 ```
 
-Important environment variables:
+Application settings are now stored in Hydra config files:
+
+- [conf/config.yaml](conf/config.yaml): shared defaults for embeddings, indexing, RAG, and frontend settings
+- [conf/deployment/local.yaml](conf/deployment/local.yaml): local frontend endpoint
+- [conf/deployment/docker.yaml](conf/deployment/docker.yaml): Docker frontend endpoint
+
+The `.env` file is only for secrets and private runtime values.
+
+Important secret environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `STRATEGY` | Embeddings backend: `openai` or `hf` |
-| `EMBEDDINGS_MODEL` | Embedding model name |
 | `OPENAI_API_KEY` | API key for OpenAI-compatible services |
-| `OPENAI_BASE_URL` | Optional base URL for OpenAI-compatible APIs |
-| `FROM_SCRATCH` | `true` to rebuild the FAISS index, `false` to load an existing one |
-| `DATA_PATH` | Path to the CSV dataset |
-| `COLUMNS_TO_DROP` | Comma-separated list of columns removed before indexing |
-| `FAISS_INDEX_PATH` | Directory containing FAISS files |
-| `FAISS_INDEX_NAME` | Base name of the FAISS index (create it if it doesn't exist) |
-| `CHAT_MODEL` | Chat model used for answer generation |
-| `RETRIEVER_K` | Number of retrieved books per query |
-| `RAG_ENDPOINT` | Backend endpoint used by Chainlit |
+| `APP_ENV` | Optional deployment profile selector. Defaults to `local`; Docker uses `docker` |
 
 Default example values live in [.env.example](.env.example).
+
+Example Hydra settings live in [conf/config.yaml](conf/config.yaml). To change the embedding model, retriever `k`, index paths, or frontend endpoint, update the config files.
 
 ## Local Development
 
@@ -161,6 +161,7 @@ Both services are built from a single multi-stage [Dockerfile](Dockerfile):
 - the `frontend` target runs Chainlit
 
 By default, the backend reads the dataset and FAISS index from the `data/` directory. You can override these paths with environment variables if needed.
+By default, the backend reads these values from Hydra config instead of environment variables.
 
 The frontend waits for the backend health check before starting.
 
@@ -193,7 +194,7 @@ Expected response shape:
 The Chainlit app is a lightweight chat client for the FastAPI backend.
 
 When started, it:
-- resolves the backend RAG endpoint from environment variables
+- resolves the backend RAG endpoint from Hydra config
 - waits for the backend to be available
 - forwards user messages to the `/rag` endpoint
 - displays the generated recommendation text in the chat UI
