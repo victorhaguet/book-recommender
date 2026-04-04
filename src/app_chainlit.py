@@ -5,7 +5,7 @@ Environment variables are loaded from a .env file.
 Please refer to the README for setup instructions.
 
 Command to run the Chainlit app:
-chainlit run app_chainlit.py --port 8080
+chainlit run src/app_chainlit.py --port 8080
 """
 
 import asyncio

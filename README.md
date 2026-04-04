@@ -31,8 +31,8 @@ The application flow is:
 8. A chat model generates the final recommendation answer.
 
 Main files:
-- [app_fastapi.py](app_fastapi.py): FastAPI backend entrypoint
-- [app_chainlit.py](app_chainlit.py): Chainlit frontend entrypoint
+- [src/app_fastapi.py](src/app_fastapi.py): FastAPI backend entrypoint
+- [src/app_chainlit.py](src/app_chainlit.py): Chainlit frontend entrypoint
 - [src/ingestion/load_books.py](src/ingestion/load_books.py): CSV loading and cleaning
 - [src/indexing/create_database.py](src/indexing/create_database.py): index creation pipeline
 - [src/indexing/embeddings.py](src/indexing/embeddings.py): embedding backend selection

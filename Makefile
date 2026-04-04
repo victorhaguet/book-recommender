@@ -37,10 +37,10 @@ test:
 	$(PYTHON) -m unittest discover -s tests -p '*test.py'
 
 api:
-	$(PYTHON) -m uvicorn app_fastapi:app --reload
+	$(PYTHON) -m uvicorn src.app_fastapi:app --reload
 
 ui:
-	$(CHAINLIT) run app_chainlit.py --port 8080
+	PYTHONPATH=. $(CHAINLIT) run src/app_chainlit.py --port 8080
 
 docker-up:
 	$(DOCKER_COMPOSE) up --build

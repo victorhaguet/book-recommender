@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
-app_fastapi = importlib.import_module("app_fastapi")
+app_fastapi = importlib.import_module("src.app_fastapi")
 
 
 def _build_config(
@@ -54,11 +54,11 @@ class TestAppFastapi(unittest.TestCase):
             with self.assertRaises(ValueError):
                 app_fastapi.get_env(["MISSING"], None, True)
 
-    @patch("app_fastapi.RAGService")
-    @patch("app_fastapi.ChatOpenAI")
-    @patch("app_fastapi.load_store")
-    @patch("app_fastapi.get_embeddings")
-    @patch("app_fastapi.load_settings")
+    @patch("src.app_fastapi.RAGService")
+    @patch("src.app_fastapi.ChatOpenAI")
+    @patch("src.app_fastapi.load_store")
+    @patch("src.app_fastapi.get_embeddings")
+    @patch("src.app_fastapi.load_settings")
     def test_init_rag_builds_dependencies(
         self,
         mock_load_settings,
@@ -112,8 +112,8 @@ class TestAppFastapi(unittest.TestCase):
             k=5,
         )
 
-    @patch("app_fastapi._init_rag")
-    @patch("app_fastapi.load_settings")
+    @patch("src.app_fastapi._init_rag")
+    @patch("src.app_fastapi.load_settings")
     def test_on_app_startup_sets_globals(self, mock_load_settings, mock_init_rag):
         """Test globals setup."""
         mock_rag = MagicMock(name="RAGService")

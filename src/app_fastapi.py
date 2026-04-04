@@ -4,7 +4,7 @@ It mirrors the Chainlit setup: the vectorstore is built/loaded on startup
 and the RAG endpoint is unavailable until initialization completes.
 
 Start to run the Fast API app : 
-python3 -m uvicorn app_fastapi:app --reload
+python3 -m uvicorn src.app_fastapi:app --reload
 
 Query the RAG service:
 curl -X POST http://127.0.0.1:8000/rag \
