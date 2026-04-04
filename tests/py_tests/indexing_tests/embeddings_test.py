@@ -1,6 +1,7 @@
 """ Test for the function get_embeddings"""
 import unittest
 from unittest.mock import MagicMock, patch
+from pydantic import SecretStr
 
 from src.indexing.embeddings import get_embeddings
 
@@ -15,19 +16,19 @@ class TestGetEmbeddings(unittest.TestCase):
     def test_get_embeddings_model_none_raises(self):
         """Test scenario where the model isn't specified"""
         with self.assertRaises(ValueError) as ctx:
-            get_embeddings(strategy="openai", model=None, api_key="sk-test")  # type: ignore[arg-type]
+            get_embeddings(strategy="openai", model=None, api_key=SecretStr("sk-test"))  # type: ignore[arg-type]
         self.assertIn(MODEL_ERROR, str(ctx.exception))
 
     def test_get_embeddings_model_empty_raises(self):
         """ Test if model is an empty str"""
         with self.assertRaises(ValueError) as ctx:
-            get_embeddings(strategy="openai", model="", api_key="sk-test")
+            get_embeddings(strategy="openai", model="", api_key=SecretStr("sk-test"))
         self.assertIn(MODEL_ERROR, str(ctx.exception))
 
     def test_get_embeddings_model_not_string_raises(self):
         """ Test if model is not a str """
         with self.assertRaises(ValueError) as ctx:
-            get_embeddings(strategy="openai", model=123, api_key="sk-test")  # type: ignore[arg-type]
+            get_embeddings(strategy="openai", model=123, api_key=SecretStr("sk-test"))  # type: ignore[arg-type]
         self.assertIn(MODEL_ERROR, str(ctx.exception))
 
     # -------------------------
@@ -42,7 +43,7 @@ class TestGetEmbeddings(unittest.TestCase):
         emb = get_embeddings(
             strategy="  OPENAI  ",
             model="text-embedding-3-small",
-            api_key="sk-test",
+            api_key=SecretStr("sk-test"),
             base_url=None,
         )
 
@@ -61,7 +62,7 @@ class TestGetEmbeddings(unittest.TestCase):
     def test_get_embeddings_openai_empty_api_key_raises(self):
         """ Test if api_key is an empty str """
         with self.assertRaises(ValueError) as ctx:
-            get_embeddings(strategy="openai", model="text-embedding-3-small", api_key="")
+            get_embeddings(strategy="openai", model="text-embedding-3-small", api_key=SecretStr(""))
         self.assertIn(API_KEY_ERROR, str(ctx.exception))
 
     def test_get_embeddings_openai_non_string_api_key_raises(self):
@@ -79,7 +80,7 @@ class TestGetEmbeddings(unittest.TestCase):
         emb = get_embeddings(
             strategy="openai",
             model="text-embedding-3-small",
-            api_key="sk-test",
+            api_key=SecretStr("sk-test"),
             base_url=None,
         )
 
@@ -99,7 +100,7 @@ class TestGetEmbeddings(unittest.TestCase):
         emb = get_embeddings(
             strategy="openai",
             model="text-embedding-3-small",
-            api_key="sk-test",
+            api_key=SecretStr("sk-test"),
             base_url="http://localhost:8000/v1",
         )
 
@@ -119,7 +120,7 @@ class TestGetEmbeddings(unittest.TestCase):
         emb = get_embeddings(
             strategy="openai",
             model="text-embedding-3-small",
-            api_key="sk-test",
+            api_key=SecretStr("sk-test"),
             base_url="",
         )
 
@@ -150,7 +151,7 @@ class TestGetEmbeddings(unittest.TestCase):
     def test_get_embeddings_invalid_strategy_raises(self):
         """Test invalid strategy scenario"""
         with self.assertRaises(ValueError) as ctx:
-            get_embeddings(strategy="bad", model="some-model", api_key="sk-test")
+            get_embeddings(strategy="bad", model="some-model", api_key=SecretStr("sk-test"))
         self.assertIn("Unsupported embeddings strategy:", str(ctx.exception))
 
 

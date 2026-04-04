@@ -4,6 +4,7 @@ import os
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
+from pydantic import SecretStr
 
 app_fastapi = importlib.import_module("src.app_fastapi")
 
@@ -12,20 +13,22 @@ def _build_config(
     *,
     strategy: str = "openai",
     embeddings_model: str = "embedding-model",
-    base_url=None,
+    embeddings_base_url=None,
     from_scratch: bool = False,
     data_path: str = "data/books.csv",
     columns_to_drop=None,
     index_path: str = "/tmp/index",
     index_name: str = "books_index",
-    chat_model: str = "gpt-3.5-turbo",
+    llm_provider: str = "openai",
+    llm_model: str = "gpt-3.5-turbo",
+    llm_base_url=None,
     retriever_k: int = 5,
 ):
     return SimpleNamespace(
         embeddings=SimpleNamespace(
             strategy=strategy,
             model=embeddings_model,
-            base_url=base_url,
+            base_url=embeddings_base_url,
         ),
         index=SimpleNamespace(
             from_scratch=from_scratch,
@@ -34,8 +37,12 @@ def _build_config(
             path=index_path,
             name=index_name,
         ),
+        llm=SimpleNamespace(
+            provider=llm_provider,
+            model=llm_model,
+            base_url=llm_base_url,
+        ),
         rag=SimpleNamespace(
-            chat_model=chat_model,
             retriever_k=retriever_k,
         ),
     )
@@ -82,19 +89,22 @@ class TestAppFastapi(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "OPENAI_API_KEY": "test-key",
+                "OPENAI_API_KEY": "fallback-key",
+                "LLM_API_KEY": "llm-key",
+                "EMBEDDINGS_API_KEY": "emb-key",
             },
             clear=True,
         ):
             result = app_fastapi._init_rag()
 
         self.assertIs(result, mock_rag)
-        mock_get_embeddings.assert_called_once_with(
-            strategy="openai",
-            model="embedding-model",
-            api_key="test-key",
-            base_url=None,
-        )
+        mock_get_embeddings.assert_called_once()
+        embeddings_call_kwargs = mock_get_embeddings.call_args.kwargs
+        self.assertEqual(embeddings_call_kwargs["strategy"], "openai")
+        self.assertEqual(embeddings_call_kwargs["model"], "embedding-model")
+        self.assertIsInstance(embeddings_call_kwargs["api_key"], SecretStr)
+        self.assertEqual(embeddings_call_kwargs["api_key"].get_secret_value(), "emb-key")
+        self.assertIsNone(embeddings_call_kwargs["base_url"])
         mock_load_store.assert_called_once_with(
             embeddings=mock_embeddings,
             path="/tmp/index",
@@ -105,7 +115,7 @@ class TestAppFastapi(unittest.TestCase):
         self.assertEqual(call_kwargs["model"], "gpt-3.5-turbo")
         self.assertEqual(call_kwargs["temperature"], 0)
         self.assertIsNone(call_kwargs["base_url"])
-        self.assertEqual(call_kwargs["api_key"].get_secret_value(), "test-key")
+        self.assertEqual(call_kwargs["api_key"].get_secret_value(), "llm-key")
         mock_rag_service.assert_called_once_with(
             llm=mock_llm,
             vectorstore=mock_vectorstore,
