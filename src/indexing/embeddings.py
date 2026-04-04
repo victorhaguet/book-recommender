@@ -45,7 +45,7 @@ def get_embeddings(
 
     # Check if the model variable is instantiate and is a string
     if not model or not isinstance(model, str):
-        raise ValueError("model variable must be a non-empty string")
+        raise ValueError("Model variable must be a non-empty string")
 
     if strategy == "openai":
         # Check if the api_key is instantiate
