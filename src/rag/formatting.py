@@ -9,6 +9,11 @@ Other strategies can be added later on if needed.
 from typing import List
 from langchain_core.documents import Document
 
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 def build_default_retrieved_books_format(books:List[Document])-> str:
     """
     Creation of a default formatting for the retrieved books.
@@ -20,13 +25,14 @@ def build_default_retrieved_books_format(books:List[Document])-> str:
     """
 
     if not books:
-        raise ValueError("books must not be empty")
+        raise ValueError("Cannot format an empty list of retrieved books")
 
+    logger.info("Formatting %d retrieved books for the prompt", len(books))
     formatted_books: str = ""
 
     for i, book in enumerate(books, start=1):
         if not isinstance(book, Document): 
-            raise ValueError("Each item in the books list must be a Document instance")
+            raise ValueError(f"Retrieved item at position {i} is not a Document")
 
         metadata_str = ", ".join(f"{key}: {value}\n" for key, value in book.metadata.items())
         page_content = book.page_content
@@ -36,4 +42,5 @@ def build_default_retrieved_books_format(books:List[Document])-> str:
                             f"{metadata_str}"
                             f"\n--------------------\n")
 
+    logger.debug("Formatted retrieved books into %d characters", len(formatted_books))
     return formatted_books

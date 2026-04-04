@@ -14,6 +14,11 @@ from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+from src.logging_utils import get_logger, summarize_text
+
+
+logger = get_logger(__name__)
+
 
 def build_chain(
         retriever: BaseRetriever,
@@ -46,36 +51,43 @@ def build_chain(
     if format_docs is None or not callable(format_docs):
         raise ValueError("format_docs must be a callable")
 
+    logger.info("Building RAG chain")
 
     def chain(query: str) -> Dict[str, Any]:
+        logger.info("Running RAG chain for query: '%s'", summarize_text(query))
+
         # retrieve documents
         try:
             retrieved_docs:List[Document] = retriever.invoke(input=query)
         except Exception as e:
             raise RuntimeError("Failed to retrieve documents") from e
+        logger.info("Retriever returned %d documents", len(retrieved_docs))
 
         # format retrieved documents
         try:
             context: str = format_docs(retrieved_docs)
         except Exception as e:
-            raise RuntimeError("Failed to format retrieved documents") from e
+            raise RuntimeError("Formatting retrieved documents failed") from e
 
         # Build prompt input
         try:
             messages: List[BaseMessage] = prompt.format_messages(retrieved_books=context)
         except Exception as e:
-            raise RuntimeError("Failed to format prompt with retrieved documents") from e
+            raise RuntimeError("Prompt formatting failed") from e
 
-        # Call
+        # Call LLM
         try:
+            logger.info("Invoking LLM with %d prompt messages", len(messages))
             llm_response: AIMessage = llm.invoke(input=messages)
         except Exception as e:
-            raise RuntimeError("Failed to invoke LLM with prompt messages") from e
+            raise RuntimeError("LLM invocation failed") from e
 
         # Extract response
         response: str = cast(str, llm_response.content)
         if not isinstance(response, str):
-            raise ValueError("LLM response content is not a string")
+            raise ValueError("LLM returned non-string content")
+
+        logger.info("RAG chain completed successfully.")
 
         return {
             "response": response,

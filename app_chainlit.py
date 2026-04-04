@@ -18,7 +18,11 @@ from typing import Optional, overload, Literal
 from dotenv import load_dotenv
 import chainlit as cl
 
+from src.logging_utils import get_logger, summarize_text
+
 load_dotenv()
+
+logger = get_logger(__name__)
 
 _RAG_ENDPOINT: Optional[str] = None
 _RAG_ERROR: Optional[Exception] = None
@@ -56,7 +60,7 @@ def _get_env(keys: list[str], default: Optional[str] = None, required: bool = Fa
         if value:
             return value
     if required and default is None:
-        raise ValueError(f"Missing environment variable: {keys[0]}")
+        raise ValueError(f"Missing required environment variable. Tried keys: {keys}")
     return default
 
 
@@ -89,6 +93,7 @@ def _resolve_rag_endpoint() -> str:
         "http://127.0.0.1:8000/rag",
         True,
     )
+    logger.info("Resolved Chainlit RAG endpoint to '%s'", endpoint)
     return endpoint
 
 
@@ -113,9 +118,11 @@ def _sync_post_json(url: str, payload: dict, timeout_seconds: float) -> tuple[in
         method="POST",
     )
     try:
+        logger.info("Posting query to RAG endpoint '%s' with timeout %.1fs", url, timeout_seconds)
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             return response.getcode(), response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
+        logger.warning("RAG endpoint returned HTTP %d", exc.code)
         return exc.code, exc.read().decode("utf-8")
 
 
@@ -132,6 +139,7 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
     :return: The response from the RAG endpoint
     :rtype: str
     """
+    logger.info("Forwarding Chainlit query: '%s'", summarize_text(query))
     status, body = await asyncio.to_thread(
         _sync_post_json,
         endpoint,
@@ -148,11 +156,11 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
 
     if status >= 400:
         detail = payload.get("detail", body or f"HTTP {status}")
-        raise RuntimeError(f"API error ({status}): {detail}")
+        raise RuntimeError(f"Chainlit received API error ({status}): {detail}")
 
     response = payload.get("response")
     if not response:
-        raise RuntimeError("Malformed response from API")
+        raise RuntimeError("Chainlit received malformed API response")
     return response
 
 
@@ -162,17 +170,24 @@ def on_app_startup() -> None:
     Resolve the FastAPI endpoint once at startup.
     """
     global _RAG_ENDPOINT, _RAG_ERROR
+    logger.info("Chainlit startup: resolving backend endpoint")
     try:
         _RAG_ENDPOINT = _resolve_rag_endpoint()
         _RAG_ERROR = None
+        logger.info("Chainlit startup completed successfully")
     except Exception as exc:
         _RAG_ENDPOINT = None
         _RAG_ERROR = exc
+        logger.exception("Chainlit startup failed")
 
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
+    """
+    Initialize the Chainlit session for a new chat. Check if the RAG endpoint is ready and store it in the session.
+    """
     cl.user_session.set("rag_ready", False)
+    logger.info("New Chainlit chat session started")
 
     if _RAG_ERROR is not None:
         await cl.Message(
@@ -188,6 +203,7 @@ async def on_chat_start() -> None:
 
     cl.user_session.set("rag_endpoint", _RAG_ENDPOINT)
     cl.user_session.set("rag_ready", True)
+    logger.info("Chat session is ready to forward requests")
     await cl.Message(
         content="Hi! What do you want to read?"
     ).send()
@@ -201,10 +217,11 @@ async def on_message(message: cl.Message) -> None:
     :param message: Message sent by the user
     :type message: cl.Message
     """
+    logger.info("Received Chainlit message: '%s'", summarize_text(message.content))
     rag_ready = cl.user_session.get("rag_ready")
     if not rag_ready:
         await cl.Message(
-            content="We are currently learning the books, please wait."
+            content="Received message while Chainlit session is not ready. Please wait a moment and try again."
         ).send()
         return
 
@@ -213,5 +230,8 @@ async def on_message(message: cl.Message) -> None:
     try:
         response = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
     except Exception as exc:
+        logger.exception("Chainlit failed to get a response from the RAG backend")
         response = f"RAG error: {exc}"
+    else:
+        logger.info("Sending Chainlit response back to the user")
     await cl.Message(content=response).send()

@@ -17,6 +17,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 def create_faiss_db(embeddings: Embeddings)-> FAISS:
     """
     Creation of an empty FAISS vectorstore
@@ -27,6 +32,7 @@ def create_faiss_db(embeddings: Embeddings)-> FAISS:
     :rtype: FAISS
     """
     if embeddings is None:
+        logger.error("Cannot create FAISS database without embeddings")
         raise ValueError("embeddings must not be None")
 
     try:
@@ -35,8 +41,9 @@ def create_faiss_db(embeddings: Embeddings)-> FAISS:
         raise RuntimeError("Failed to compute embedding dimension via embed_query()") from e
     
     if vec==[]:
-        raise ValueError("embed_query() generated an empty list.")
+        raise ValueError("Embedding backend returned an empty vector")
 
+    logger.info("Creating empty FAISS index with embedding dimension %d", len(vec))
     
     index = faiss.IndexFlatL2(len(vec))
 
@@ -59,9 +66,11 @@ def add_documents(documents: List[Document], vectorstore: FAISS)-> None:
     """
 
     if vectorstore is None:
-        raise ValueError("vectorstore must not be None")
+        raise ValueError("Cannot add documents to a missing vectorstore")
 
+    logger.info("Adding %d documents to FAISS vectorstore", len(documents))
     vectorstore.add_documents(documents=documents)
+    logger.info("Documents added to FAISS vectorstore")
 
 def save_store(vectorstore: FAISS, path: str, index_name: str)-> None:
     """
@@ -75,15 +84,17 @@ def save_store(vectorstore: FAISS, path: str, index_name: str)-> None:
     :type index_name: str
     """
     if vectorstore is None:
-        raise ValueError("vectorstore must not be None")
+        raise ValueError("Cannot save a missing vectorstore")
 
     if not path or not isinstance(path, str):
-        raise ValueError("path must be a non-empty string")
+        raise ValueError("Invalid FAISS save path")
 
     if not index_name or not isinstance(index_name, str):
-        raise ValueError("index_name must be a non-empty string")
+        raise ValueError("Invalid FAISS index name")
 
+    logger.info("Saving FAISS vectorstore to '%s' with index name '%s'", path, index_name)
     vectorstore.save_local(folder_path=path, index_name=index_name)
+    logger.info("FAISS vectorstore saved successfully")
 
 def load_store(embeddings: Embeddings, path: str, index_name:str)->FAISS:
     """
@@ -99,23 +110,26 @@ def load_store(embeddings: Embeddings, path: str, index_name:str)->FAISS:
     :rtype: FAISS
     """
     if embeddings is None:
-        raise ValueError("embeddings must not be None")
+        raise ValueError("Cannot load FAISS vectorstore without embeddings")
 
     if not path or not isinstance(path, str):
-        raise ValueError("path must be a non-empty string")
+        raise ValueError("Invalid FAISS load path")
 
     if not index_name or not isinstance(index_name, str):
-        raise ValueError("index_name must be a non-empty string")
+        raise ValueError("Invalid FAISS index name")
 
     try:
-        return FAISS.load_local(
+        logger.info("Loading FAISS vectorstore from '%s' with index name '%s'", path, index_name)
+        store = FAISS.load_local(
             folder_path=path, 
             embeddings=embeddings, 
             index_name=index_name,
             allow_dangerous_deserialization=True
         )
+        logger.info("FAISS vectorstore loaded successfully")
+        return store
     except FileNotFoundError:
-        raise
+        raise FileNotFoundError(f"FAISS vectorstore files were not found at '{path}' with index '{index_name}'")
     except Exception as e:
         raise RuntimeError(
             f"Failed to load FAISS store from '{path}' (index_name='{index_name}'). "
