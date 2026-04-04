@@ -8,7 +8,7 @@ defaults:
 embeddings:
   strategy: openai # Select the embedding strategy (openai or sentence_transformers)
   model: text-embedding-3-small
-  base_url: null # Optional base URL for OpenAI-compatible API services
+  base_url: null # Optional base URL for OpenAI-compatible embedding API services
 
 # Index configuration
 index:
@@ -22,9 +22,14 @@ index:
   path: data/faiss_index/
   name: books_index
 
+# LLM configuration
+llm:
+  provider: openai # Only OpenAI and OpenAI-compatible chat providers are supported
+  model: gpt-3.5-turbo
+  base_url: null # Optional base URL for OpenAI-compatible chat API services
+
 # RAG configuration
 rag:
-  chat_model: gpt-3.5-turbo # Only used OPENAI strategy for now.
   retriever_k: 5 # Number of chunks to retrieve.
 
 # Frontend configuration

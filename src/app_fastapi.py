@@ -145,14 +145,38 @@ def _init_rag() -> RAGService:
     config = load_settings()
     strategy: str = config.embeddings.strategy
     embeddings_model: str = config.embeddings.model
-    api_key: str = _get_env(["OPENAI_API_KEY", "api_key"], None, True)
-    base_url: Optional[str] = config.embeddings.base_url
 
+    # Load API keys
+    embeddings_api_key: Optional[str] = _get_env(
+        ["EMBEDDINGS_API_KEY", "OPENAI_EMBEDDINGS_API_KEY", "OPENAI_API_KEY", "api_key"],
+        None,
+        strategy == "openai",
+    )
+    embeddings_base_url: Optional[str] = config.embeddings.base_url
+    embeddings_api_secret: Optional[SecretStr] = None
+    if embeddings_api_key is not None:
+        embeddings_api_secret = SecretStr(embeddings_api_key)
+
+    llm_provider: str = config.llm.provider.lower().strip()
+    if llm_provider != "openai":
+        raise ValueError("Only 'openai' is currently supported for the LLM provider")
+    llm_model: str = config.llm.model
+    llm_api_key: Optional[str] = _get_env(
+        ["LLM_API_KEY", "OPENAI_LLM_API_KEY", "OPENAI_API_KEY", "api_key"],
+        None,
+        True,
+    )
+    llm_base_url: Optional[str] = config.llm.base_url
+    llm_api_secret: Optional[SecretStr] = None
+    if llm_api_key is not None:
+        llm_api_secret = SecretStr(llm_api_key)
+
+    # Initialize embeddings
     embeddings: Embeddings = get_embeddings(
         strategy=strategy,
         model=embeddings_model,
-        api_key=api_key,
-        base_url=base_url,
+        api_key=embeddings_api_secret,
+        base_url=embeddings_base_url,
     )
 
     from_scratch: bool = bool(config.index.from_scratch)
@@ -175,11 +199,16 @@ def _init_rag() -> RAGService:
         logger.info("Loading existing vectorstore from disk")
         vectorstore = load_store(embeddings=embeddings, path=index_path, index_name=index_name)
 
-    chat_model = config.rag.chat_model
-    llm = ChatOpenAI(model=chat_model, api_key=SecretStr(api_key), base_url=base_url, temperature=0)
+    # Initialize LLM
+    llm = ChatOpenAI(
+        model=llm_model,
+        api_key=llm_api_secret,
+        base_url=llm_base_url,
+        temperature=0,
+    )
     k = int(config.rag.retriever_k)
 
-    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", chat_model, k)
+    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", llm_model, k)
     return RAGService(llm=llm, vectorstore=vectorstore, k=k)
 
 
