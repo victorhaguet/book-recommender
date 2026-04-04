@@ -14,6 +14,7 @@ The repository is structured as a small production-style AI application:
 - Build a FAISS vector index from a CSV dataset
 - Load a prebuilt index to avoid rebuilding embeddings on every startup
 - Support OpenAI-compatible embeddings or local Hugging Face embeddings
+- Configure the chat LLM separately from the embedding backend
 - Serve the backend and frontend locally or through Docker Compose
 - Run a test suite from a single command
 
@@ -75,7 +76,7 @@ cp .env.example .env
 
 Application settings are now stored in Hydra config files:
 
-- [conf/config.yaml](conf/config.yaml): shared defaults for embeddings, indexing, RAG, and frontend settings
+- [conf/config.yaml](conf/config.yaml): shared defaults for embeddings, LLM, indexing, RAG, and frontend settings
 - [conf/deployment/local.yaml](conf/deployment/local.yaml): local frontend endpoint
 - [conf/deployment/docker.yaml](conf/deployment/docker.yaml): Docker frontend endpoint
 
@@ -85,12 +86,12 @@ Important secret environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | API key for OpenAI-compatible services |
+| `OPENAI_API_KEY` | Optional shared fallback key for OpenAI-compatible services |
 | `APP_ENV` | Optional deployment profile selector. Defaults to `local`; Docker uses `docker` |
 
 Default example values live in [.env.example](.env.example).
 
-Example Hydra settings live in [conf/config.yaml](conf/config.yaml). To change the embedding model, retriever `k`, index paths, or frontend endpoint, update the config files.
+Example Hydra settings live in [conf/config.yaml](conf/config.yaml). To change the embedding backend, LLM model, retriever `k`, index paths, or frontend endpoint, update the config files.
 
 ## Local Development
 
