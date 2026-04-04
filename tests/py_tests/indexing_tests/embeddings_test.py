@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from src.indexing.embeddings import get_embeddings
 
 
-MODEL_ERROR = "Invalid embeddings model configuration"
+MODEL_ERROR = "Model variable must be a non-empty string"
 API_KEY_ERROR = "Missing API key for OpenAI embeddings strategy"
 
 class TestGetEmbeddings(unittest.TestCase):
