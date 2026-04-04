@@ -16,6 +16,10 @@ from src.indexing.retriever import set_retrieving_strategy
 from src.rag.prompts import get_default_generation_prompt
 from src.rag.formatting import build_default_retrieved_books_format
 from src.rag.chain import build_chain
+from src.logging_utils import get_logger, summarize_text
+
+
+logger = get_logger(__name__)
 
 class RAGService:
     """
@@ -36,6 +40,8 @@ class RAGService:
         if not isinstance(k, int) or k <= 0:
             raise ValueError("k must be a positive integer")
 
+        logger.info("Initializing RAG service with retriever k=%d", k)
+
         # Set the LLM and the retriever
         self.llm: ChatOpenAI = llm
         self.retriever: BaseRetriever = set_retrieving_strategy(vectorstore=vectorstore, k=k)
@@ -51,6 +57,7 @@ class RAGService:
             prompt=self.prompt,
             format_docs=self.format
         )
+        logger.info("RAG service initialized successfully")
 
     def answer_query(self, query: str) -> Dict[str, Any]:
         """
@@ -62,9 +69,11 @@ class RAGService:
         :rtype: Dict[str, Any]
         """
         if not query or not isinstance(query, str):
-            raise ValueError("query must be a non-empty string")
+            raise ValueError("Received invalid query: query must be a non-empty string")
         try:
+            logger.info("Answering user query: '%s'", summarize_text(query))
             result=self.chain(query)
         except Exception as e:
-            raise RuntimeError("Failed to get answer from RAG chain") from e
+            raise RuntimeError("RAG service failed to answer query") from e
+        logger.info("Query answered successfully")
         return result

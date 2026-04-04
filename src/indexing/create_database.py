@@ -11,6 +11,10 @@ from langchain_core.documents import Document
 
 from src.ingestion.load_books import load_books
 from src.indexing.faiss_store import create_faiss_db, add_documents, save_store
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
 
 
 def create_database(
@@ -37,12 +41,19 @@ def create_database(
     :return: Vectorstore in FAISS format
     :rtype: FAISS
     """
+    logger.info(
+        "Creating FAISS database from '%s' and saving to '%s/%s'",
+        data_path,
+        index_path,
+        index_name,
+    )
     
     # Ingest data
     books: List[Document] = load_books(
         path=data_path, 
         columns_to_drop=columns_to_drop
     )
+    logger.info("Loaded %d documents for index creation", len(books))
 
     # Create and fill vectorstore
     vectorstore: FAISS = create_faiss_db(embeddings)
@@ -50,6 +61,7 @@ def create_database(
         documents=books,
         vectorstore=vectorstore
     )
+    logger.info("Vectorstore populated with %d documents", len(books))
 
     # Save store
     save_store(
@@ -57,5 +69,6 @@ def create_database(
         path=index_path,
         index_name=index_name
     )
+    logger.info("FAISS database creation complete")
 
     return vectorstore

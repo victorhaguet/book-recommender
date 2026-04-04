@@ -10,6 +10,11 @@ By default, k will be set to 5.
 from langchain_community.vectorstores import FAISS
 from langchain_core.retrievers import BaseRetriever
 
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 def set_retrieving_strategy(vectorstore: FAISS, k: int = 5)-> BaseRetriever:
     """
     Create a Retriever from a VectorStore that uses the K retrieval strategy.
@@ -22,11 +27,12 @@ def set_retrieving_strategy(vectorstore: FAISS, k: int = 5)-> BaseRetriever:
     :rtype: BaseRetriever
     """
     if vectorstore is None:
-        raise ValueError("vectorstore must not be None")
+        raise ValueError("Cannot create retriever from a missing vectorstore")
 
     if not isinstance(k, int) or k <= 0:
-        raise ValueError("k must be a positive integer")
+        raise ValueError(f"Invalid retriever k value: {k}")
     try:
+        logger.info("Configuring retriever with k=%d", k)
         return vectorstore.as_retriever(k = k)
     except Exception as e:
         raise RuntimeError("Failed to create retriever from vectorstore") from e

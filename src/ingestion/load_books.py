@@ -13,6 +13,11 @@ from typing import List
 import pandas as pd
 from langchain_core.documents import Document
 
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 def load_books(path: str, columns_to_drop: List[str]) -> List[Document]:
     """
     Load books data from a CSV file, clean it, and convert it to a list of Document objects.
@@ -24,9 +29,11 @@ def load_books(path: str, columns_to_drop: List[str]) -> List[Document]:
     :return: list of Document objects (one document per book)
     :rtype: list[Document]
     """
+    logger.info("Loading books dataset from '%s'", path)
     df: pd.DataFrame = __load_dataset(path)
     clean_df: pd.DataFrame = __clean_dataframe(df, columns_to_drop)
     docs: List[Document] = __dataframe_to_documents(clean_df)
+    logger.info("Loaded %d books into LangChain documents", len(docs))
     return docs
 
 def __load_dataset(path: str) -> pd.DataFrame:
@@ -39,11 +46,13 @@ def __load_dataset(path: str) -> pd.DataFrame:
     :rtype: DataFrame
     """
     try:
-        return pd.read_csv(path, delimiter=',')
+        df = pd.read_csv(path, delimiter=',')
+        logger.info("Read dataset '%s' with %d rows and %d columns", path, len(df), len(df.columns))
+        return df
     except FileNotFoundError as e:
-        raise FileNotFoundError(f"Could not find this file: {path}") from e
+        raise FileNotFoundError(f"Dataset file not found: {path}") from e
     except pd.errors.ParserError as e:
-        raise ValueError(f"Not well formatted file: {path}") from e
+        raise ValueError(f"Failed to parse dataset file: {path}") from e
 
 
 def __clean_dataframe(df: pd.DataFrame, columns_to_drop: list[str]) -> pd.DataFrame:
@@ -57,18 +66,26 @@ def __clean_dataframe(df: pd.DataFrame, columns_to_drop: list[str]) -> pd.DataFr
     :return: cleaned DataFrame
     :rtype: DataFrame
     """
+    initial_rows = len(df)
+
     # Make sure that all the columns that should be removed are in the dataframe
     missing_cols: List[str] = [c for c in columns_to_drop if c not in df.columns]
     if missing_cols:
-        raise ValueError(f"These columns are not in the dataframes : {missing_cols}. Please make sure to only select existing columns")
+        raise ValueError(f"Requested columns to drop are missing from dataset: {missing_cols}. Please make sure to only select existing columns")
 
     # Make sure that description is not part of the columns to drop
     has_description: bool = "description" in columns_to_drop
     if has_description:
-        raise ValueError("Description variable can't be removed as it is necessary for the RAG to run.")
+        raise ValueError("Attempted to drop mandatory 'description' column")
 
     df = df.drop(columns=columns_to_drop)
     df = df[df['description'].notna()]
+    logger.info(
+        "Cleaned dataset: dropped %d columns, removed %d rows without description, %d rows remain",
+        len(columns_to_drop),
+        initial_rows - len(df),
+        len(df),
+    )
     return df
 
 def __dataframe_to_documents(df: pd.DataFrame) -> list[Document]:
@@ -86,4 +103,5 @@ def __dataframe_to_documents(df: pd.DataFrame) -> list[Document]:
         metadata = {key: row[key] for key in df.columns if key != 'description'}
         doc = Document(page_content=page_content, metadata=metadata)
         docs.append(doc)
+    logger.debug("Converted %d dataframe rows into documents", len(docs))
     return docs

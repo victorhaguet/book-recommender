@@ -25,9 +25,12 @@ from langchain_community.vectorstores import FAISS
 from src.indexing.embeddings import get_embeddings
 from src.indexing.faiss_store import load_store
 from src.indexing.create_database import create_database
+from src.logging_utils import get_logger, summarize_text
 from src.rag.rag_service import RAGService
 
 load_dotenv()
+
+logger = get_logger(__name__)
 
 app = FastAPI()
 
@@ -69,7 +72,7 @@ def _get_env(keys: list[str], default: Optional[str] = None, required: bool = Fa
         if value:
             return value
     if required and default is None:
-        raise ValueError(f"Missing environment variable: {keys[0]}")
+        raise ValueError(f"Missing required environment variable. Tried keys: {keys}")
     return default
 
 def get_env(keys: list[str], default: Optional[str] = None, required: bool = False) -> str | None:
@@ -107,7 +110,7 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
         return True
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
-    raise ValueError(f"Invalid boolean value: {value}")
+    raise ValueError(f"Invalid boolean environment value: {value}")
 
 
 def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> List[str]:
@@ -135,6 +138,7 @@ def _init_rag() -> RAGService:
     :return: Initialized RAG service
     :rtype: RAGService
     """
+    logger.info("Initializing FastAPI RAG dependencies from environment")
     strategy: str = _get_env(["STRATEGY", "strategy"], None, True)
     embeddings_model: str = _get_env(["EMBEDDINGS_MODEL", "EMBEDDING_MODEL", "model"], None, True)
     api_key: str = _get_env(["OPENAI_API_KEY", "api_key"], None, True)
@@ -161,6 +165,7 @@ def _init_rag() -> RAGService:
 
     vectorstore: FAISS
     if from_scratch:
+        logger.info("Building vectorstore from scratch")
         vectorstore = create_database(
             data_path=data_path,
             columns_to_drop=columns_to_drop,
@@ -169,12 +174,14 @@ def _init_rag() -> RAGService:
             index_name=index_name,
         )
     else:
+        logger.info("Loading existing vectorstore from disk")
         vectorstore = load_store(embeddings=embeddings, path=index_path, index_name=index_name)
 
     chat_model = _get_env(["CHAT_MODEL", "LLM_MODEL"], "gpt-3.5-turbo", True)
     llm = ChatOpenAI(model=chat_model, api_key=SecretStr(api_key), base_url=base_url, temperature=0)
     k = int(_get_env(["RETRIEVER_K", "K"], "5"))
 
+    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", chat_model, k)
     return RAGService(llm=llm, vectorstore=vectorstore, k=k)
 
 
@@ -184,12 +191,15 @@ def on_app_startup() -> None:
     Build/load the vectorstore once at app startup so the endpoint is blocked until ready.
     """
     global _RAG_INSTANCE, _RAG_ERROR
+    logger.info("FastAPI startup: preparing RAG service")
     try:
         _RAG_INSTANCE = _init_rag()
         _RAG_ERROR = None
+        logger.info("FastAPI startup completed successfully")
     except Exception as exc:
         _RAG_INSTANCE = None
         _RAG_ERROR = exc
+        logger.exception("FastAPI startup failed")
 
 
 class RagRequest(BaseModel):
@@ -210,9 +220,9 @@ async def health_endpoint() -> HealthResponse:
     Healthcheck endpoint for container readiness.
     """
     if _RAG_ERROR is not None:
-        raise HTTPException(status_code=500, detail=f"RAG startup error: {_RAG_ERROR}")
+        raise HTTPException(status_code=500, detail=f"Health check failed because startup errored: {_RAG_ERROR}")
     if _RAG_INSTANCE is None:
-        raise HTTPException(status_code=503, detail="We are currently learning the books, please wait.")
+        raise HTTPException(status_code=503, detail="Health check failed because RAG service is not ready yet.")
     return HealthResponse(status="ok")
 
 
@@ -227,19 +237,22 @@ async def rag_endpoint(payload: RagRequest) -> RagResponse:
     :return: Description
     :rtype: RagResponse
     """
+    logger.info("Received /rag request for query: '%s'", summarize_text(payload.query))
+
     # Check if it runs properly
     if _RAG_ERROR is not None:
-        raise HTTPException(status_code=500, detail=f"RAG startup error: {_RAG_ERROR}")
+        raise HTTPException(status_code=500, detail=f"Rejecting /rag request because startup errored: {_RAG_ERROR}")
 
     # Check if the vectorstore is ready
     if _RAG_INSTANCE is None:
-        raise HTTPException(status_code=503, detail="We are currently learning the books, please wait.")
+        raise HTTPException(status_code=503, detail="Rejecting /rag request because RAG service is not ready yet.")
 
     # Try to call the RAG instance
     try:
         result = _RAG_INSTANCE.answer_query(payload.query)
         response = result["response"]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"RAG error: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Failed to answer /rag request: {exc}") from exc
 
+    logger.info("Successfully answered /rag request with response length %d", len(response))
     return RagResponse(response=response)

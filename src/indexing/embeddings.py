@@ -22,6 +22,11 @@ from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
+from src.logging_utils import get_logger
+
+
+logger = get_logger(__name__)
+
 def get_embeddings(
         strategy: str,
         model: str,
@@ -36,17 +41,19 @@ def get_embeddings(
     """
     # Normalise strategy
     strategy = strategy.lower().strip()
+    logger.info("Initializing embeddings with strategy '%s' and model '%s'", strategy, model)
 
     # Check if the model variable is instantiate and is a string
     if not model or not isinstance(model, str):
-        raise ValueError("model must be a non-empty string")
+        raise ValueError("model variable must be a non-empty string")
 
     if strategy == "openai":
         # Check if the api_key is instantiate
         if not api_key or not isinstance(api_key, str):
-            raise ValueError("api_key must be a non-empty string")
+            raise ValueError("Missing API key for OpenAI embeddings strategy")
 
         # Instantiate OpenAIEmbeddings
+        logger.info("Using OpenAI-compatible embeddings backend")
         return OpenAIEmbeddings(
             model = model,
             api_key= SecretStr(api_key),
@@ -54,10 +61,10 @@ def get_embeddings(
         )
 
     elif strategy == "hf":
-
+        logger.info("Using Hugging Face local embeddings backend")
         return HuggingFaceEmbeddings(
             model_name = model
         )
 
     else:
-        raise ValueError("strategy must be 'openai' or 'hf'")
+        raise ValueError(f"Unsupported embeddings strategy: '{strategy}'. Strategy must be 'openai' or 'hf'")
