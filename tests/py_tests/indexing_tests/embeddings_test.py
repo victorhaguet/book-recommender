@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 from src.indexing.embeddings import get_embeddings
 
 
-MODEL_ERROR = "model must be a non-empty string"
-API_KEY_ERROR = "api_key must be a non-empty string"
+MODEL_ERROR = "Invalid embeddings model configuration"
+API_KEY_ERROR = "Missing API key for OpenAI embeddings strategy"
 
 class TestGetEmbeddings(unittest.TestCase):
     # -------------------------
@@ -151,7 +151,7 @@ class TestGetEmbeddings(unittest.TestCase):
         """Test invalid strategy scenario"""
         with self.assertRaises(ValueError) as ctx:
             get_embeddings(strategy="bad", model="some-model", api_key="sk-test")
-        self.assertIn("strategy must be 'openai' or 'hf'", str(ctx.exception))
+        self.assertIn("Unsupported embeddings strategy:", str(ctx.exception))
 
 
 if __name__ == "__main__":

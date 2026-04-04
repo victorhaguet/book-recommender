@@ -120,7 +120,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
-        self.assertIn("RAG error", str(ctx.exception))
+        self.assertIn("Failed to answer /rag request", str(ctx.exception))
 
     async def test_rag_endpoint_requires_ready(self):
         """Test that the endpoint is blocked until RAG is ready."""
@@ -131,7 +131,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
-        self.assertIn("learning the books", str(ctx.exception))
+        self.assertIn("RAG service is not ready yet", str(ctx.exception))
 
     async def test_rag_endpoint_reports_startup_error(self):
         """Test that the endpoint surfaces startup errors."""
@@ -142,7 +142,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
-        self.assertIn("RAG startup error", str(ctx.exception))
+        self.assertIn("startup errored", str(ctx.exception))
 
 
 if __name__ == "__main__":
