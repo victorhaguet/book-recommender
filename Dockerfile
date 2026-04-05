@@ -10,13 +10,17 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY requirements.lock /app/requirements.lock
+RUN pip install --no-cache-dir -r /app/requirements.lock
+
+COPY pyproject.toml /app/pyproject.toml
+COPY README.md /app/README.md
+COPY src /app/src
+RUN pip install --no-cache-dir --no-deps .
 
 FROM base AS backend
 
 COPY conf /app/conf
-COPY src /app/src
 COPY data /app/data
 
 EXPOSE 8000
@@ -26,7 +30,6 @@ CMD ["python", "-m", "uvicorn", "src.app_fastapi:app", "--host", "0.0.0.0", "--p
 FROM base AS frontend
 
 COPY conf /app/conf
-COPY src /app/src
 
 EXPOSE 8080
 

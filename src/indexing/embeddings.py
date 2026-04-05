@@ -20,7 +20,6 @@ from typing import Optional
 from pydantic import SecretStr
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.logging_utils import get_logger
 
@@ -62,6 +61,14 @@ def get_embeddings(
 
     elif strategy == "hf":
         logger.info("Using Hugging Face local embeddings backend")
+        # Lazy import to avoid unnecessary dependency if not using Hugging Face strategy
+        try:
+            from langchain_huggingface import HuggingFaceEmbeddings
+        except ImportError as exc:
+            raise ImportError(
+                "Hugging Face embeddings dependencies are not installed. "
+                "Install them with `pip install -e '.[hf]'` to use strategy='hf'."
+            ) from exc
         return HuggingFaceEmbeddings(
             model_name = model
         )

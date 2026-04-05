@@ -134,7 +134,7 @@ class TestGetEmbeddings(unittest.TestCase):
     # -------------------------
     # HF branch
     # -------------------------
-    @patch("src.indexing.embeddings.HuggingFaceEmbeddings")
+    @patch("langchain_huggingface.HuggingFaceEmbeddings")
     def test_get_embeddings_hf(self, mock_hf_cls):
         """Test HF happy path"""
         fake_instance = MagicMock(name="HuggingFaceEmbeddingsInstance")
@@ -144,6 +144,22 @@ class TestGetEmbeddings(unittest.TestCase):
 
         self.assertIs(emb, fake_instance)
         mock_hf_cls.assert_called_once_with(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+    @patch("builtins.__import__")
+    def test_get_embeddings_hf_missing_dependencies_raises(self, mock_import):
+        """Test HF strategy fails with an explicit message when optional deps are missing"""
+        real_import = __import__
+
+        def side_effect(name, *args, **kwargs):
+            if name == "langchain_huggingface":
+                raise ImportError("No module named 'langchain_huggingface'")
+            return real_import(name, *args, **kwargs)
+
+        mock_import.side_effect = side_effect
+
+        with self.assertRaises(ImportError) as ctx:
+            get_embeddings(strategy="hf", model="sentence-transformers/all-MiniLM-L6-v2")
+        self.assertIn("pip install -e '.[hf]'", str(ctx.exception))
 
     # -------------------------
     # Invalid strategy

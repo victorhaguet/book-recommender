@@ -22,7 +22,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: make install
+        run: make install-hf
 
       - name: Run test suite
         run: make test

@@ -116,6 +116,12 @@ Install dependencies into the active environment:
 make install
 ```
 
+Install the optional local Hugging Face embedding stack only if you set `embeddings.strategy: hf`:
+
+```bash
+make install-hf
+```
+
 Run the test suite:
 
 ```bash
@@ -157,7 +163,8 @@ The Compose setup starts:
 - `frontend` on port `8080`
 
 Both services are built from a single multi-stage [Dockerfile](Dockerfile):
-- the `base` stage installs shared Python dependencies once
+- the `base` stage installs pinned third-party Python dependencies from `requirements.lock`
+- the application package is then installed separately from the local source with `pip install --no-deps .`
 - the `backend` target runs FastAPI
 - the `frontend` target runs Chainlit
 

@@ -7,6 +7,20 @@ __pycache__/
 # Settings
 .env
 
+# Chainlit
 .chainlit/
 
+# Virtual environment
 venv/
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# VS Code
+.vscode/
+
+# Vectorstores
+*.faiss
+*.pkl
