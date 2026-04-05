@@ -116,6 +116,12 @@ Install dependencies into the active environment:
 make install
 ```
 
+Install the optional local Hugging Face embedding stack only if you set `embeddings.strategy: hf`:
+
+```bash
+make install-hf
+```
+
 Run the test suite:
 
 ```bash
