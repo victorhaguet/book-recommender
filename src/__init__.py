@@ -1,0 +1,1 @@
+"""Book RAG application package."""

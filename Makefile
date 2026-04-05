@@ -1,13 +1,14 @@
 # Makefile for managing the development environment and Docker stack
 # Usage:
 #   make env         # Create a local .venv virtual environment
-#   make install     # Install dependencies in the active environment
+#   make install     # Install the project and core dependencies
+#   make install-hf  # Install optional Hugging Face embedding dependencies
 #   make test        # Run the Python test suite
 #   make api         # Start the FastAPI backend
 #   make ui          # Start the Chainlit frontend
 #   make docker-up   # Build and start the Docker stack
 #   make docker-down # Stop the Docker stack
-.PHONY: help env install test api ui docker-up docker-down
+.PHONY: help env install install-hf test api ui docker-up docker-down
 
 # Variables for commands
 PYTHON ?= python
@@ -18,7 +19,8 @@ DOCKER_COMPOSE := docker compose
 help:
 	@printf "Available targets:\n"
 	@printf "  make env         Create a local .venv virtual environment\n"
-	@printf "  make install     Install dependencies in the active environment using the requirements.txt file\n"
+	@printf "  make install     Install the project and core dependencies in editable mode\n"
+	@printf "  make install-hf  Install optional Hugging Face embedding dependencies\n"
 	@printf "  make test        Run the Python test suite\n"
 	@printf "  make api         Start the FastAPI backend\n"
 	@printf "  make ui          Start the Chainlit frontend\n"
@@ -31,7 +33,10 @@ env:
 
 install:
 	$(PYTHON) -m pip install --upgrade pip
-	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install -e .
+
+install-hf:
+	$(PYTHON) -m pip install -e ".[hf]"
 
 test:
 	$(PYTHON) -m unittest discover -s tests -p '*test.py'
