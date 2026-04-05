@@ -10,10 +10,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
+COPY requirements.lock /app/requirements.lock
+RUN pip install --no-cache-dir -r /app/requirements.lock
+
 COPY pyproject.toml /app/pyproject.toml
 COPY README.md /app/README.md
 COPY src /app/src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 FROM base AS backend
 
