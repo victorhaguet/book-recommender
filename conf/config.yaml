@@ -34,5 +34,16 @@ rag:
 
 # Frontend configuration
 frontend:
+  title: Book recommandor system
+  subtitle: Tell the system what kind of book you want, and it will search the catalog for a fitting recommendation.
+  starters:
+    - label: I want an epic fantasy with political intrigue, magic, and a large cast.
+      message: I want an epic fantasy with political intrigue, magic, and a large cast.
+    - label: Suggest a cozy mystery with a charming setting and an amateur sleuth.
+      message: Suggest a cozy mystery with a charming setting and an amateur sleuth.
+    - label: I want a literary novel about grief, family tension, and reinvention.
+      message: I want a literary novel about grief, family tension, and reinvention.
+    - label: Recommend science fiction about survival, isolation, or a hostile world.
+      message: Recommend science fiction about survival, isolation, or a hostile world.
   timeout_seconds: 30
   rag_endpoint: http://127.0.0.1:8000/rag
