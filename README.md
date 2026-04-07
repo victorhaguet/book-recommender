@@ -1,8 +1,8 @@
 ![Book recommender](/public/book-recommender.png)
 
-# Book RAG
+# Book Recommender
 
-`book-rag` is a retrieval-augmented generation project that recommends books from a catalog based on a natural-language query.
+`book-recommender` is a retrieval-augmented generation project that recommends books from a catalog based on a natural-language query.
 
 The repository is structured as a small production-style AI application:
 - a FastAPI backend that builds or loads the retrieval stack and exposes the RAG endpoint
