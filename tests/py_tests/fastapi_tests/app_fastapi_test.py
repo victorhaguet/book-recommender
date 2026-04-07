@@ -144,7 +144,18 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
     async def test_rag_endpoint_returns_response(self):
         """Test that the endpoint returns the RAG response."""
         rag = MagicMock(name="RAGService")
-        rag.answer_query.return_value = {"response": "ok"}
+        rag.answer_query.return_value = {
+            "response": "ok",
+            "recommendations": [
+                {
+                    "title": "Book A",
+                    "author": "Alice",
+                    "summary": "Summary",
+                    "thumbnail": "https://example.com/a.jpg",
+                    "num_pages": 320,
+                }
+            ],
+        }
 
         app_fastapi._RAG_INSTANCE = rag
         app_fastapi._RAG_ERROR = None
@@ -153,6 +164,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         result = await app_fastapi.rag_endpoint(payload)
 
         self.assertEqual(result.response, "ok")
+        self.assertEqual(len(result.recommendations), 1)
 
     async def test_rag_endpoint_handles_error(self):
         """Test that the endpoint maps RAG errors to HTTP 500."""

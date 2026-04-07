@@ -16,8 +16,9 @@ def _install_chainlit_stub() -> None:
         return func
 
     class DummyMessage:
-        def __init__(self, content):
+        def __init__(self, content, elements=None):
             self.content = content
+            self.elements = elements or []
 
         async def send(self):
             await asyncio.sleep(0)
@@ -139,23 +140,38 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
     async def test_on_message_sends_response(self):
         """Test that the application answer user's message"""
-        message_instance = MagicMock()
-        message_instance.send = AsyncMock()
         incoming = MagicMock()
         incoming.content = "hello"
         app_chainlit._APP_CONFIG = _build_config()
+
+        card_instance = MagicMock()
+        card_instance.send = AsyncMock()
 
         with patch(
             "src.app_chainlit.cl.user_session.get",
             side_effect=[True, "http://127.0.0.1:8000/rag"],
         ), patch(
             "src.app_chainlit._call_rag_endpoint",
-            return_value="ok",
-        ), patch("src.app_chainlit.cl.Message", return_value=message_instance) as mock_message:
+            return_value={
+                "response": "ok",
+                "recommendations": [
+                    {
+                        "title": "Book A",
+                        "author": "Alice",
+                        "summary": "Summary",
+                        "thumbnail": "https://example.com/a.jpg",
+                        "num_pages": 320,
+                    }
+                ],
+            },
+        ), patch(
+            "src.app_chainlit.cl.Message",
+            return_value=card_instance,
+        ) as mock_message:
             await app_chainlit.on_message(incoming)
 
-        message_instance.send.assert_awaited_once()
-        mock_message.assert_called_once_with(content="ok")
+        card_instance.send.assert_awaited_once()
+        self.assertEqual(mock_message.call_count, 1)
 
     async def test_on_message_handles_error(self):
         """Test correct error raised when there is an error while receiving a message"""
