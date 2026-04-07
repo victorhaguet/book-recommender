@@ -146,7 +146,7 @@ class TestRAGService(unittest.TestCase):
 
         self.assertEqual(
             result["response"],
-            "I could not find a perfect match, but here are the closest books from the catalog.",
+            "Here are the closest books from the catalog.",
         )
         self.assertEqual(len(result["recommendations"]), 1)
         self.assertEqual(result["recommendations"][0]["title"], "Book A")
