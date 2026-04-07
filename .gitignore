@@ -7,9 +7,6 @@ __pycache__/
 # Settings
 .env
 
-# Chainlit
-.chainlit/
-
 # Virtual environment
 venv/
 

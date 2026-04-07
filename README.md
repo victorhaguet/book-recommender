@@ -1,3 +1,5 @@
+![Book recommender](/public/book-recommender.png)
+
 # Book RAG
 
 `book-rag` is a retrieval-augmented generation project that recommends books from a catalog based on a natural-language query.

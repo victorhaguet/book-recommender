@@ -1,0 +1,140 @@
+:root {
+  --literary-accent: #1d606d;
+}
+
+html,
+body {
+  color: hsl(var(--foreground));
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(circle at top, rgba(190, 160, 112, 0.10), transparent 28%),
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--secondary)) 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(29, 96, 109, 0.025) 1px, transparent 1px);
+  background-size: 100% 32px;
+  opacity: 0.35;
+}
+
+[data-theme="dark"],
+[data-mui-color-scheme="dark"],
+html.dark,
+body.dark {
+  background:
+    radial-gradient(circle at top, rgba(29, 96, 109, 0.18), transparent 30%),
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--secondary)) 100%);
+}
+
+[data-theme="dark"] body::before,
+[data-mui-color-scheme="dark"] body::before,
+html.dark body::before,
+body.dark::before {
+  background-image: linear-gradient(rgba(126, 194, 215, 0.045) 1px, transparent 1px);
+  opacity: 0.22;
+}
+
+h1,
+h2,
+h3,
+[class*="MuiTypography-h1"],
+[class*="MuiTypography-h2"],
+[class*="MuiTypography-h3"] {
+  font-family: Baskerville, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  letter-spacing: 0.02em;
+}
+
+[class*="MuiPaper-root"],
+[class*="MuiCard-root"],
+[class*="MuiDrawer-paper"] {
+  background: hsl(var(--card) / 0.90);
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border) / 0.9);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.10);
+  backdrop-filter: blur(10px);
+}
+
+[class*="MuiDrawer-paper"] {
+  background: linear-gradient(180deg, hsl(var(--sidebar-background)), hsl(var(--card) / 0.94));
+}
+
+[class*="MuiButton-root"] {
+  border-radius: 999px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+[class*="MuiButton-contained"],
+[class*="MuiButton-outlined"]:hover,
+[data-testid="chat-submit"],
+button[data-testid="chat-submit"],
+button[data-testid="chat-submit"]:hover,
+button[data-testid="chat-submit"]:focus,
+button[data-testid="chat-submit"]:active,
+[data-testid="chat-submit"] [class*="MuiFab-root"] {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+button[data-testid="chat-submit"] svg,
+[data-testid="chat-submit"] svg,
+[class*="MuiButton-contained"] svg {
+  color: hsl(var(--primary-foreground));
+}
+
+textarea,
+input,
+[contenteditable="true"],
+[class*="MuiInputBase-root"] {
+  color: hsl(var(--foreground));
+  font-family: Baskerville, Georgia, serif;
+}
+
+[class*="MuiInputBase-root"] {
+  background: hsl(var(--accent) / 0.9);
+  border: 1px solid hsl(var(--border));
+  border-radius: 18px;
+}
+
+a {
+  color: hsl(var(--primary));
+}
+
+pre,
+code {
+  background: hsl(var(--muted) / 0.85);
+  border-radius: 8px;
+}
+
+[class*="message"],
+[data-testid*="message"] {
+  border-radius: 20px;
+  color: hsl(var(--foreground));
+}
+
+[class*="MuiChip-root"],
+button[role="tab"] {
+  background: hsl(var(--accent) / 0.9);
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--accent-foreground));
+}
+
+img[src*="book-recommender-big.png"] {
+  width: 320px !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  object-fit: contain;
+}
+
+[data-testid*="file"],
+button[aria-label*="file" i],
+button[aria-label*="attach" i],
+button[title*="file" i],
+button[title*="attach" i] {
+  display: none !important;
+}

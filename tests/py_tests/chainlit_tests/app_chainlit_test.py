@@ -23,6 +23,16 @@ def _install_chainlit_stub() -> None:
             await asyncio.sleep(0)
             return None
 
+    class DummyStarter:
+        def __init__(self, label, message, command=None, icon=None):
+            self.label = label
+            self.message = message
+            self.command = command
+            self.icon = icon
+
+    class DummyUser:
+        pass
+
     class DummyUserSession:
         def __init__(self):
             self._data = {}
@@ -36,7 +46,10 @@ def _install_chainlit_stub() -> None:
     cl_stub.on_app_startup = _decorator
     cl_stub.on_chat_start = _decorator
     cl_stub.on_message = _decorator
+    cl_stub.set_starters = _decorator
     cl_stub.Message = DummyMessage
+    cl_stub.Starter = DummyStarter
+    cl_stub.User = DummyUser
     cl_stub.user_session = DummyUserSession()
     sys.modules["chainlit"] = cl_stub
 
@@ -48,6 +61,18 @@ app_chainlit = importlib.import_module("src.app_chainlit")
 def _build_config(endpoint: str = "http://127.0.0.1:8000/rag", timeout_seconds: float = 30.0):
     return SimpleNamespace(
         frontend=SimpleNamespace(
+            title="Book recommandor system",
+            subtitle="Tell the system what kind of book you want, and it will search the catalog for a fitting recommendation.",
+            starters=[
+                SimpleNamespace(
+                    label="I want an epic fantasy with political intrigue, magic, and a large cast.",
+                    message="I want an epic fantasy with political intrigue, magic, and a large cast.",
+                ),
+                SimpleNamespace(
+                    label="Suggest a cozy mystery with a charming setting and an amateur sleuth.",
+                    message="Suggest a cozy mystery with a charming setting and an amateur sleuth.",
+                ),
+            ],
             rag_endpoint=endpoint,
             timeout_seconds=timeout_seconds,
         )
@@ -81,24 +106,36 @@ class TestAppChainlit(unittest.TestCase):
 
 
 class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
-    async def test_on_chat_start_sets_session_and_sends_message(self):
-        """Test that the chainlit app correctly start and send the introduction message"""
-        message_instance = MagicMock()
-        message_instance.send = AsyncMock()
-
+    async def test_on_chat_start_sets_session_without_sending_message(self):
+        """Test that the Chainlit app prepares the session without collapsing the empty state."""
         app_chainlit._RAG_ENDPOINT = "http://127.0.0.1:8000/rag"
         app_chainlit._RAG_ERROR = None
         app_chainlit._APP_CONFIG = _build_config()
 
         with patch("src.app_chainlit.cl.user_session.set") as mock_set, patch(
-            "src.app_chainlit.cl.Message", return_value=message_instance
+            "src.app_chainlit.cl.Message"
         ) as mock_msg:
             await app_chainlit.on_chat_start()
 
         mock_set.assert_any_call("rag_endpoint", "http://127.0.0.1:8000/rag")
         mock_set.assert_any_call("rag_ready", True)
-        mock_msg.assert_called_once_with(content="Hi! What do you want to read?")
-        message_instance.send.assert_awaited_once()
+        mock_msg.assert_not_called()
+
+    async def test_set_starters_returns_configured_starters(self):
+        """Test that starter prompts are exposed from the frontend config."""
+        app_chainlit._APP_CONFIG = _build_config()
+
+        starters = await app_chainlit.set_starters()
+
+        self.assertEqual(len(starters), 2)
+        self.assertEqual(
+            starters[0].label,
+            "I want an epic fantasy with political intrigue, magic, and a large cast.",
+        )
+        self.assertEqual(
+            starters[0].message,
+            "I want an epic fantasy with political intrigue, magic, and a large cast.",
+        )
 
     async def test_on_message_sends_response(self):
         """Test that the application answer user's message"""

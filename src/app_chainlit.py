@@ -31,6 +31,54 @@ _RAG_ERROR: Optional[Exception] = None
 _APP_CONFIG: Optional[DictConfig] = None
 
 
+def _get_config_value(config_section: object, key: str, default: str) -> str:
+    """
+    Read a string value from either an OmegaConf section or a simple object.
+
+    :param config_section: Frontend config section
+    :type config_section: object
+    :param key: Config key to read
+    :type key: str
+    :param default: Fallback value
+    :type default: str
+    :return: Resolved string value
+    :rtype: str
+    """
+    if hasattr(config_section, "get"):
+        value = config_section.get(key, default)
+    else:
+        value = getattr(config_section, key, default)
+    return str(value)
+
+
+def _get_starter_specs() -> list[dict[str, str]]:
+    """
+    Return the configured starter prompts.
+
+    :return: Starter prompt specifications
+    :rtype: list[dict[str, str]]
+    """
+    if _APP_CONFIG is None:
+        return []
+
+    if hasattr(_APP_CONFIG.frontend, "get"):
+        starters = _APP_CONFIG.frontend.get("starters", [])
+    else:
+        starters = getattr(_APP_CONFIG.frontend, "starters", [])
+    starter_specs: list[dict[str, str]] = []
+    for starter in starters:
+        if hasattr(starter, "get"):
+            label = str(starter.get("label", "")).strip()
+            message = str(starter.get("message", "")).strip()
+        else:
+            label = str(getattr(starter, "label", "")).strip()
+            message = str(getattr(starter, "message", "")).strip()
+        if not label or not message:
+            continue
+        starter_specs.append({"label": label, "message": message})
+    return starter_specs
+
+
 @overload
 def _get_env(keys: list[str], default: str, required: Literal[True, False] = False) -> str: ...
 
@@ -183,6 +231,20 @@ def on_app_startup() -> None:
         logger.exception("Chainlit startup failed")
 
 
+@cl.set_starters
+async def set_starters(_user: Optional[cl.User] = None) -> list[cl.Starter]:
+    """
+    Expose starter prompts on the initial Chainlit screen.
+
+    :return: Starter prompts for the frontend
+    :rtype: list[cl.Starter]
+    """
+    return [
+        cl.Starter(label=starter["label"], message=starter["message"])
+        for starter in _get_starter_specs()
+    ]
+
+
 @cl.on_chat_start
 async def on_chat_start() -> None:
     """
@@ -206,9 +268,6 @@ async def on_chat_start() -> None:
     cl.user_session.set("rag_endpoint", _RAG_ENDPOINT)
     cl.user_session.set("rag_ready", True)
     logger.info("Chat session is ready to forward requests")
-    await cl.Message(
-        content="Hi! What do you want to read?"
-    ).send()
 
 
 @cl.on_message
