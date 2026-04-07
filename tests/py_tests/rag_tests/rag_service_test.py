@@ -1,6 +1,7 @@
 """Tests for RAGService."""
 import unittest
 from unittest.mock import MagicMock, patch
+from langchain_core.documents import Document
 
 from src.rag.rag_service import RAGService
 
@@ -72,7 +73,19 @@ class TestRAGService(unittest.TestCase):
         vectorstore = MagicMock(name="FAISS")
         retriever = MagicMock(name="Retriever")
         chain = MagicMock(name="Chain")
-        chain.return_value = {"response": "ok", "retrieved_documents": []}
+        chain.return_value = {
+            "response": '{"intro": "Here are some recommendations.", "recommendations": [{"recommendation_number": 1, "summary": "A strong political fantasy choice.", "match_confidence": "high"}]}',
+            "retrieved_documents": [
+                Document(
+                    page_content="Desc A",
+                    metadata={
+                        "title": "Book A",
+                        "authors": "Alice",
+                        "thumbnail": "https://example.com/a.jpg",
+                    },
+                )
+            ],
+        }
 
         mock_set_retrieving_strategy.return_value = retriever
         mock_build_chain.return_value = chain
@@ -80,7 +93,11 @@ class TestRAGService(unittest.TestCase):
         service = RAGService(llm=llm, vectorstore=vectorstore, k=3)
         result = service.answer_query("hello")
 
-        self.assertEqual(result, chain.return_value)
+        self.assertEqual(result["response"], "Here are some recommendations.")
+        self.assertEqual(len(result["recommendations"]), 1)
+        self.assertEqual(result["recommendations"][0]["title"], "Book A")
+        self.assertEqual(result["recommendations"][0]["author"], "Alice")
+        self.assertIsNone(result["recommendations"][0]["num_pages"])
         chain.assert_called_once_with("hello")
 
     @patch("src.rag.rag_service.build_chain")
@@ -96,6 +113,44 @@ class TestRAGService(unittest.TestCase):
         for value in ("", None, 123):
             with self.assertRaises(ValueError):
                 service.answer_query(value)
+
+    @patch("src.rag.rag_service.build_chain")
+    @patch("src.rag.rag_service.set_retrieving_strategy")
+    def test_answer_query_falls_back_when_llm_returns_no_recommendations(
+        self,
+        mock_set_retrieving_strategy,
+        mock_build_chain,
+    ):
+        """Test fallback recommendation cards when the LLM returns an empty list."""
+        llm = MagicMock(name="ChatOpenAI")
+        vectorstore = MagicMock(name="FAISS")
+        mock_set_retrieving_strategy.return_value = MagicMock(name="Retriever")
+        mock_build_chain.return_value = MagicMock(
+            return_value={
+                "response": '{"intro": "Sorry, no suitable recommendation was found based on your request.", "recommendations": []}',
+                "retrieved_documents": [
+                    Document(
+                        page_content="Desc A",
+                        metadata={
+                            "title": "Book A",
+                            "authors": "Alice",
+                            "thumbnail": "https://example.com/a.jpg",
+                        },
+                    )
+                ],
+            }
+        )
+
+        service = RAGService(llm=llm, vectorstore=vectorstore, k=3)
+        result = service.answer_query("hello")
+
+        self.assertEqual(
+            result["response"],
+            "I could not find a perfect match, but here are the closest books from the catalog.",
+        )
+        self.assertEqual(len(result["recommendations"]), 1)
+        self.assertEqual(result["recommendations"][0]["title"], "Book A")
+        self.assertIsNone(result["recommendations"][0]["num_pages"])
 
     @patch("src.rag.rag_service.build_chain")
     @patch("src.rag.rag_service.set_retrieving_strategy")

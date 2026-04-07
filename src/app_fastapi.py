@@ -17,7 +17,7 @@ from typing import Optional, overload, Literal, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 from langchain_openai import ChatOpenAI
 from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import FAISS
@@ -232,11 +232,22 @@ def on_app_startup() -> None:
 
 
 class RagRequest(BaseModel):
+    """Request model for the RAG endpoint."""
     query: str
+
+class RecommendationCard(BaseModel):
+    """Model for a recommended book card in the RAG response."""
+    title: str
+    thumbnail: str | None = None
+    author: str
+    summary: str
+    num_pages: int | str | None = None
 
 
 class RagResponse(BaseModel):
+    """Response model for the RAG endpoint."""
     response: str
+    recommendations: list[RecommendationCard] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -280,8 +291,9 @@ async def rag_endpoint(payload: RagRequest) -> RagResponse:
     try:
         result = _RAG_INSTANCE.answer_query(payload.query)
         response = result["response"]
+        recommendations = result.get("recommendations", [])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to answer /rag request: {exc}") from exc
 
     logger.info("Successfully answered /rag request with response length %d", len(response))
-    return RagResponse(response=response)
+    return RagResponse(response=response, recommendations=recommendations)

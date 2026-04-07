@@ -55,7 +55,6 @@ The ingestion layer assumes:
 By default, the example configuration drops:
 - `isbn13`
 - `isbn10`
-- `thumbnail`
 
 Rows with missing descriptions are removed during ingestion.
 
@@ -195,9 +194,20 @@ Expected response shape:
 
 ```json
 {
-  "response": "..."
+  "response": "...",
+  "recommendations": [
+    {
+      "title": "...",
+      "thumbnail": "...",
+      "author": "...",
+      "summary": "...",
+      "num_pages": 123
+    }
+  ]
 }
 ```
+
+The backend returns recommendation book cards in addition to the intro text. This keeps the answer format cleaner and gives the frontend structured fields for the title, author, thumbnail, short description, and number of pages.
 
 ## Frontend Usage
 
@@ -207,7 +217,9 @@ When started, it:
 - resolves the backend RAG endpoint from Hydra config
 - waits for the backend to be available
 - forwards user messages to the `/rag` endpoint
-- displays the generated recommendation text in the chat UI
+- displays a single response message with an introduction followed by cleaner recommendation cards
+
+Each recommendation card is rendered from structured backend data instead of relying only on raw LLM prose. In practice, this makes the recommendations easier to read and allows the UI to show the book title, cover thumbnail, author, page count, and short description in a consistent order.
 
 ## Testing
 

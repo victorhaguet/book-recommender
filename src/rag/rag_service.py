@@ -4,6 +4,7 @@ needed to perform RAG operations, including retrieval, creation
 of prompts, formatting of retrieved documents, and generation.
 """
 
+import json
 from typing import Dict, Any, Callable, List
 
 from langchain_core.documents import Document
@@ -20,6 +21,143 @@ from src.logging_utils import get_logger, summarize_text
 
 
 logger = get_logger(__name__)
+
+
+def _stringify(value: object, fallback: str = "N/A") -> str:
+    """
+    Normalize values into non-empty strings.
+
+    :param value: Value to normalize.
+    :type value: object
+    :param fallback: Fallback string.
+    :type fallback: str
+    :return: Normalized string.
+    :rtype: str
+    """
+    if value is None:
+        return fallback
+    text = str(value).strip()
+    return text if text else fallback
+
+
+def _extract_json_payload(raw_response: str) -> Dict[str, Any]:
+    """
+    Parse the JSON payload returned by the LLM.
+
+    :param raw_response: Raw LLM output.
+    :type raw_response: str
+    :return: Parsed JSON object.
+    :rtype: Dict[str, Any]
+    """
+    # Check if the response is wrapped in code block markdown and extract the content if so (security check)
+    cleaned = raw_response.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    parsed = json.loads(cleaned)
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM response must be a JSON object")
+    return parsed
+
+
+def _build_recommendation_cards(
+    payload: Dict[str, Any],
+    retrieved_documents: List[Document],
+) -> List[Dict[str, Any]]:
+    """
+    Build presentation cards from parsed LLM output and retrieved docs.
+
+    :param payload: Parsed LLM JSON output.
+    :type payload: Dict[str, Any]
+    :param retrieved_documents: Retrieved documents in rank order.
+    :type retrieved_documents: List[Document]
+    :return: Structured recommendation cards.
+    :rtype: List[Dict[str, Any]]
+    """
+    raw_recommendations = payload.get("recommendations", [])
+    if not isinstance(raw_recommendations, list):
+        raise ValueError("recommendations must be a list")
+
+    cards: list[Dict[str, Any]] = []
+
+    # For each book retrieved, 
+    for item in raw_recommendations:
+        if not isinstance(item, dict):
+            continue
+
+        # Get its rank in the list
+        recommendation_number = item.get("recommendation_number")
+        if not isinstance(recommendation_number, int):
+            continue
+        index = recommendation_number - 1
+        if index < 0 or index >= len(retrieved_documents):
+            continue
+
+        # Get its metadata and the LLM summary
+        document = retrieved_documents[index]
+        metadata = document.metadata
+        title = _stringify(metadata.get("title"))
+        author = _stringify(metadata.get("authors", metadata.get("author")))
+        thumbnail = _stringify(metadata.get("thumbnail"), fallback="")
+        summary = _stringify(item.get("summary"))
+
+        # Format the card and add it to the list of cards
+        cards.append(
+            {
+                "title": title,
+                "author": author,
+                "summary": summary,
+                "thumbnail": thumbnail or None,
+                "num_pages": metadata.get("num_pages"),
+            }
+        )
+
+    return cards
+
+
+def _build_fallback_recommendation_cards(
+    retrieved_documents: List[Document],
+    limit: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Build recommendation cards directly from retrieved documents. This is used as a fallback when the LLM does not return structured recommendations.
+
+    :param retrieved_documents: Retrieved documents in rank order.
+    :type retrieved_documents: List[Document]
+    :param limit: Maximum number of fallback cards.
+    :type limit: int
+    :return: Structured fallback cards.
+    :rtype: List[Dict[str, Any]]
+    """
+    cards: list[Dict[str, Any]] = []
+    for document in retrieved_documents[:limit]:
+        metadata = document.metadata
+        title = _stringify(metadata.get("title"))
+        author = _stringify(metadata.get("authors", metadata.get("author")))
+        thumbnail = _stringify(metadata.get("thumbnail"), fallback="")
+        description = _stringify(document.page_content)
+
+        summary = description
+        if len(summary) > 280:
+            summary = summary[:277].rstrip() + "..."
+
+        cards.append(
+            {
+                "title": title,
+                "author": author,
+                "summary": summary,
+                "thumbnail": thumbnail or None,
+                "num_pages": metadata.get("num_pages"),
+            }
+        )
+
+    return cards
+
 
 class RAGService:
     """
@@ -72,8 +210,35 @@ class RAGService:
             raise ValueError("Received invalid query: query must be a non-empty string")
         try:
             logger.info("Answering user query: '%s'", summarize_text(query))
-            result=self.chain(query)
+            result = self.chain(query)
         except Exception as e:
             raise RuntimeError("RAG service failed to answer query") from e
+
+        # Post-process the result to extract recommendations and handle formatting fallbacks
+        raw_response = _stringify(result.get("response"), fallback="")
+        retrieved_documents = result.get("retrieved_documents", [])
+        if not isinstance(retrieved_documents, list):
+            raise RuntimeError("RAG service returned invalid retrieved documents")
+
+        try:
+            # Extract the structured payload from the LLM response
+            payload = _extract_json_payload(raw_response)
+            intro = _stringify(payload.get("intro"), fallback="Here are some recommendations.")
+            recommendations = _build_recommendation_cards(payload, retrieved_documents)
+            # If the LLM did not return any recommendations, use the retrieved documents as a fallback and manually create the intro
+            if not recommendations and retrieved_documents:
+                logger.info("LLM returned no recommendations, using fallback cards from retrieved documents")
+                intro = "Here are the closest books from the catalog."
+                recommendations = _build_fallback_recommendation_cards(retrieved_documents)
+            result["response"] = intro
+            result["recommendations"] = recommendations
+            result["raw_response"] = raw_response
+        except Exception:
+            logger.warning("Falling back to raw LLM response because structured parsing failed")
+            result["recommendations"] = _build_fallback_recommendation_cards(retrieved_documents)
+            if result["recommendations"]:
+                result["response"] = "Here are the closest books from the catalog."
+            result["raw_response"] = raw_response
+
         logger.info("Query answered successfully")
         return result

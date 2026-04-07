@@ -13,7 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Optional, overload, Literal
+from typing import Any, Optional, overload, Literal
 
 from dotenv import load_dotenv
 import chainlit as cl
@@ -174,7 +174,7 @@ def _sync_post_json(url: str, payload: dict, timeout_seconds: float) -> tuple[in
         return exc.code, exc.read().decode("utf-8")
 
 
-async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) -> str:
+async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) -> dict[str, Any]:
     """
     Call the RAG FastAPI endpoint asynchronously.
     
@@ -184,8 +184,8 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
     :type query: str
     :param timeout_seconds: The timeout for the request in seconds
     :type timeout_seconds: float
-    :return: The response from the RAG endpoint
-    :rtype: str
+    :return: The parsed response from the RAG endpoint
+    :rtype: dict[str, Any]
     """
     logger.info("Forwarding Chainlit query: '%s'", summarize_text(query))
     status, body = await asyncio.to_thread(
@@ -209,7 +209,60 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
     response = payload.get("response")
     if not response:
         raise RuntimeError("Chainlit received malformed API response")
-    return response
+    recommendations = payload.get("recommendations", [])
+    if not isinstance(recommendations, list):
+        recommendations = []
+    return {"response": response, "recommendations": recommendations}
+
+
+def _format_recommendation_message(card: dict[str, Any]) -> str:
+    """
+    Build the message text for a recommendation card.
+
+    :param card: Structured recommendation card.
+    :type card: dict[str, Any]
+    :return: Markdown content for the message.
+    :rtype: str
+    """
+    # Get the book values
+    title = str(card.get("title", "Unknown title")).strip()
+    thumbnail = str(card.get("thumbnail", "")).strip()
+    author = str(card.get("author", "Unknown author")).strip()
+    num_pages = card.get("num_pages")
+    summary = str(card.get("summary", "")).strip()
+
+    # Build the message content with conditional formatting based on available values
+    first_line = title
+    if author:
+        first_line = f"{title} - {author}"
+
+    parts = [f"### {first_line}"]
+    if thumbnail:
+        parts.append(f"![Book cover for {title}]({thumbnail})")
+    if num_pages not in (None, "", "N/A"):
+        parts.append(f"**Pages:** {num_pages}")
+    if summary:
+        parts.append(summary)
+    return "\n\n".join(parts)
+
+
+def _format_recommendations_response(
+    intro_message: str,
+    recommendations: list[dict[str, Any]],
+) -> str:
+    """
+    Build a single markdown response containing the intro and all recommendations.
+
+    :param intro_message: Introductory sentence shown before the list.
+    :type intro_message: str
+    :param recommendations: Structured recommendation cards.
+    :type recommendations: list[dict[str, Any]]
+    :return: Markdown response content.
+    :rtype: str
+    """
+    sections = [intro_message.strip()]
+    sections.extend(_format_recommendation_message(card) for card in recommendations)
+    return "\n\n---\n\n".join(section for section in sections if section.strip())
 
 
 @cl.on_app_startup
@@ -289,10 +342,21 @@ async def on_message(message: cl.Message) -> None:
     endpoint: str = cl.user_session.get("rag_endpoint")
     timeout_seconds = 30.0 if _APP_CONFIG is None else float(_APP_CONFIG.frontend.timeout_seconds)
     try:
-        response = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
+        payload = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
     except Exception as exc:
         logger.exception("Chainlit failed to get a response from the RAG backend")
         response = f"RAG error: {exc}"
+        await cl.Message(content=response).send()
+        return
     else:
         logger.info("Sending Chainlit response back to the user")
-    await cl.Message(content=response).send()
+
+    response = str(payload.get("response", "")).strip()
+    recommendations = payload.get("recommendations", [])
+    if recommendations:
+        intro_message = response or "Here are the books that could correspond to your expectations."
+        await cl.Message(
+            content=_format_recommendations_response(intro_message, recommendations)
+        ).send()
+    elif response:
+        await cl.Message(content=response).send()
