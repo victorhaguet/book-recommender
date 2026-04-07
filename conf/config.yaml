@@ -12,12 +12,11 @@ embeddings:
 
 # Index configuration
 index:
-  from_scratch: false # If true, the index will be created from scratch, otherwise it will try to load an existing index
+  from_scratch: true # If true, the index will be created from scratch, otherwise it will try to load an existing index
   data_path: data/books.csv
   columns_to_drop:
     - isbn13
     - isbn10
-    - thumbnail
   # The path where the FAISS index will be stored and the name of the index
   path: data/faiss_index/
   name: books_index
