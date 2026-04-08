@@ -116,12 +116,12 @@ class TestRAGService(unittest.TestCase):
 
     @patch("src.rag.rag_service.build_chain")
     @patch("src.rag.rag_service.set_retrieving_strategy")
-    def test_answer_query_falls_back_when_llm_returns_no_recommendations(
+    def test_answer_query_keeps_empty_recommendations_from_llm(
         self,
         mock_set_retrieving_strategy,
         mock_build_chain,
     ):
-        """Test fallback recommendation cards when the LLM returns an empty list."""
+        """Test that an empty LLM recommendation list is returned as-is."""
         llm = MagicMock(name="ChatOpenAI")
         vectorstore = MagicMock(name="FAISS")
         mock_set_retrieving_strategy.return_value = MagicMock(name="Retriever")
@@ -146,11 +146,9 @@ class TestRAGService(unittest.TestCase):
 
         self.assertEqual(
             result["response"],
-            "Here are the closest books from the catalog.",
+            "Sorry, no suitable recommendation was found based on your request.",
         )
-        self.assertEqual(len(result["recommendations"]), 1)
-        self.assertEqual(result["recommendations"][0]["title"], "Book A")
-        self.assertIsNone(result["recommendations"][0]["num_pages"])
+        self.assertEqual(result["recommendations"], [])
 
     @patch("src.rag.rag_service.build_chain")
     @patch("src.rag.rag_service.set_retrieving_strategy")
