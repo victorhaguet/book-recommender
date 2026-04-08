@@ -18,7 +18,7 @@ The repository is structured as a small production-style AI application:
 - Support OpenAI-compatible embeddings or local Hugging Face embeddings
 - Configure the chat LLM separately from the embedding backend
 - Serve the backend and frontend locally or through Docker Compose
-- Run a test suite from a single command
+- Run the full test suite and coverage checks from single commands
 
 ## Architecture
 
@@ -127,6 +127,24 @@ Run the test suite:
 
 ```bash
 make test
+```
+
+Run the test suite with coverage enforcement:
+
+```bash
+make coverage
+```
+
+Generate an HTML coverage report in `htmlcov/`:
+
+```bash
+make coverage-html
+```
+
+Show missing coverage lines for a single source file:
+
+```bash
+make coverage-file FILE=src/rag/prompts.py
 ```
 
 Start the FastAPI backend:
@@ -241,6 +259,24 @@ Run everything with:
 make test
 ```
 
+Run the full suite with coverage for `src/` and fail below `90%` total coverage:
+
+```bash
+make coverage
+```
+
+Generate an HTML report you can inspect in the browser:
+
+```bash
+make coverage-html
+```
+
+Show missing line numbers for a specific file:
+
+```bash
+make coverage-file FILE=src/rag/prompts.py
+```
+
 ## Continuous Integration
 
 The repository includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml).
@@ -250,8 +286,8 @@ It runs automatically:
 - on pull requests
 
 The CI currently checks:
-- Python dependency installation through `make install`
-- the full Python test suite through `make test`
+- Python dependency installation through `make install-hf`
+- coverage for the `src/` package through `make coverage`
 - Docker image builds for both the `backend` and `frontend` targets
 
 You can view the result:
