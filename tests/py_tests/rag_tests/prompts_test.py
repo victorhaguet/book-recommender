@@ -26,6 +26,15 @@ class TestPrompts(unittest.TestCase):
         self.assertTrue(messages)
         self.assertTrue(any("Book A" in message.content for message in messages))
 
+    def test_default_prompt_mentions_off_topic_refusal(self):
+        """Test that the prompt includes the fixed off-topic refusal instruction."""
+        prompt = get_default_generation_prompt()
+        messages = prompt.format_messages(retrieved_books="Book A")
+        combined_content = "\n".join(str(message.content) for message in messages)
+
+        self.assertIn("I'm just a book recommender", combined_content)
+        self.assertIn("Please reformulate your query", combined_content)
+
 
 if __name__ == "__main__":
     unittest.main()

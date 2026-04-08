@@ -225,11 +225,6 @@ class RAGService:
             payload = _extract_json_payload(raw_response)
             intro = _stringify(payload.get("intro"), fallback="Here are some recommendations.")
             recommendations = _build_recommendation_cards(payload, retrieved_documents)
-            # If the LLM did not return any recommendations, use the retrieved documents as a fallback and manually create the intro
-            if not recommendations and retrieved_documents:
-                logger.info("LLM returned no recommendations, using fallback cards from retrieved documents")
-                intro = "Here are the closest books from the catalog."
-                recommendations = _build_fallback_recommendation_cards(retrieved_documents)
             result["response"] = intro
             result["recommendations"] = recommendations
             result["raw_response"] = raw_response
