@@ -21,6 +21,7 @@ dependencies = [
     "chainlit==2.9.6",
     "fastapi==0.128.0",
     "uvicorn==0.40.0",
+    "coverage==7.13.5",
 ]
 
 [project.optional-dependencies]
@@ -37,3 +38,9 @@ include = ["src*"]
 
 [tool.setuptools.package-data]
 "src.rag" = ["templates/*.jinja2"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+fail_under = 90
