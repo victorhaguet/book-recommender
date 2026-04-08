@@ -24,8 +24,8 @@ jobs:
       - name: Install dependencies
         run: make install-hf
 
-      - name: Run test suite
-        run: make test
+      - name: Run coverage
+        run: make coverage
 
   docker-build:
     name: Docker Build
