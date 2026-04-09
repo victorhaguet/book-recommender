@@ -142,6 +142,7 @@ def _build_fallback_recommendation_cards(
         thumbnail = _stringify(metadata.get("thumbnail"), fallback="")
         description = _stringify(document.page_content)
 
+        # Truncate the description to 280 characters for display purposes.
         summary = description
         if len(summary) > 280:
             summary = summary[:277].rstrip() + "..."
