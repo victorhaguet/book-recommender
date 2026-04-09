@@ -111,6 +111,30 @@ class TestBookLoader(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_books(self.csv_path, columns_to_drop=["does_not_exist"])
 
+    def test_load_books_raises_for_missing_dataset_file(self):
+        """ Test that a FileNotFoundError is raised when the specified CSV file does not exist."""
+        with self.assertRaises(FileNotFoundError):
+            load_books("/tmp/definitely-missing-books.csv", columns_to_drop=[])
+
+    def test_load_books_raises_for_invalid_csv_content(self):
+        """ Test that a ValueError is raised when the CSV content is invalid."""
+        with open(self.csv_path, "w", encoding="utf-8") as handle:
+            handle.write('title,description\n"broken')
+
+        with self.assertRaises(ValueError):
+            load_books(self.csv_path, columns_to_drop=[])
+
+    def test_load_books_rejects_dropping_description_column(self):
+        """ Test that a ValueError is raised if the user tries to drop the description column, which is required for the page_content of the documents."""
+        df = pd.DataFrame(
+            [
+                {"title": "Book I", "description": "Desc I"},
+            ]
+        )
+        self._write_df_to_csv(df)
+
+        with self.assertRaises(ValueError):
+            load_books(self.csv_path, columns_to_drop=["description"])
+
 if __name__ == "__main__":
     unittest.main()
-

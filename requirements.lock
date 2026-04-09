@@ -10,3 +10,4 @@ faiss-cpu==1.13.2
 chainlit==2.9.6
 fastapi==0.128.0
 uvicorn==0.40.0
+coverage==7.13.5

@@ -159,7 +159,7 @@ def _init_rag() -> RAGService:
 
     llm_provider: str = config.llm.provider.lower().strip()
     if llm_provider != "openai":
-        raise ValueError("Only 'openai' is currently supported for the LLM provider")
+        raise ValueError("Only 'openai' is currently supported for the LLM provider") # This will be extended
     llm_model: str = config.llm.model
     llm_api_key: Optional[str] = _get_env(
         ["LLM_API_KEY", "OPENAI_LLM_API_KEY", "OPENAI_API_KEY", "api_key"],
