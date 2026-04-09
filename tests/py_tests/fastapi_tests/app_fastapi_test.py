@@ -195,8 +195,13 @@ class TestAppFastapi(unittest.TestCase):
         """Test that _init_rag raises an error if the LLM provider specified in the config is not supported."""
         mock_load_settings.return_value = _build_config(llm_provider="anthropic")
 
-        with self.assertRaisesRegex(ValueError, "Only 'openai' is currently supported"):
-            app_fastapi._init_rag()
+        with patch.dict(
+            os.environ,
+            {"EMBEDDINGS_API_KEY": "emb-key"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "Only 'openai' is currently supported"):
+                app_fastapi._init_rag()
 
     @patch("src.app_fastapi._init_rag")
     @patch("src.app_fastapi.load_settings")
