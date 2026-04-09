@@ -1,10 +1,15 @@
 """Tests for prompt helpers."""
+import tempfile
 import unittest
 from pathlib import Path
 
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.rag.prompts import DEFAULT_GENERATION_PROMPT_PATH, get_default_generation_prompt
+from src.rag.prompts import (
+    DEFAULT_GENERATION_PROMPT_PATH,
+    _load_prompt_template,
+    get_default_generation_prompt,
+)
 
 
 class TestPrompts(unittest.TestCase):
@@ -34,6 +39,20 @@ class TestPrompts(unittest.TestCase):
 
         self.assertIn("I'm just a book recommender", combined_content)
         self.assertIn("Please reformulate your query", combined_content)
+
+    def test_load_prompt_template_raises_for_missing_file(self):
+        """Test that loading a non-existent prompt template file raises a FileNotFoundError."""
+        with self.assertRaises(FileNotFoundError):
+            _load_prompt_template(Path("/tmp/definitely-missing-prompt-template.jinja2"))
+
+    def test_load_prompt_template_raises_for_empty_file(self):
+        """Test that loading an empty prompt template file raises a ValueError."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jinja2") as handle:
+            handle.write("   \n")
+            handle.flush()
+
+            with self.assertRaises(ValueError):
+                _load_prompt_template(Path(handle.name))
 
 
 if __name__ == "__main__":

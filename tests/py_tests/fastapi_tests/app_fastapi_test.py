@@ -49,6 +49,12 @@ def _build_config(
 
 
 class TestAppFastapi(unittest.TestCase):
+    def setUp(self):
+        """Reset module-level globals before each test."""
+        app_fastapi._RAG_INSTANCE = None
+        app_fastapi._RAG_ERROR = None
+        app_fastapi._APP_CONFIG = None
+
     def test_get_env_returns_value(self):
         """Test that environment variables are correctly loaded."""
         with patch.dict(os.environ, {"STRATEGY": "openai"}):
@@ -60,6 +66,23 @@ class TestAppFastapi(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError):
                 app_fastapi.get_env(["MISSING"], None, True)
+
+    def test_parse_bool_handles_none_truthy_falsey_and_invalid_values(self):
+        """Test that _parse_bool correctly interprets various boolean representations."""
+        self.assertTrue(app_fastapi._parse_bool(None, default=True))
+        self.assertTrue(app_fastapi._parse_bool(" yes "))
+        self.assertFalse(app_fastapi._parse_bool("off"))
+        with self.assertRaises(ValueError):
+            app_fastapi._parse_bool("maybe")
+
+    def test_parse_csv_list_handles_none_and_filters_empty_items(self):
+        """Test that _parse_csv_list correctly handles None values and filters out empty items."""
+        self.assertEqual(app_fastapi._parse_csv_list(None), [])
+        self.assertEqual(app_fastapi._parse_csv_list(None, default=["a"]), ["a"])
+        self.assertEqual(
+            app_fastapi._parse_csv_list(" title, , author ,, summary "),
+            ["title", "author", "summary"],
+        )
 
     @patch("src.app_fastapi.RAGService")
     @patch("src.app_fastapi.ChatOpenAI")
@@ -122,6 +145,59 @@ class TestAppFastapi(unittest.TestCase):
             k=5,
         )
 
+    @patch("src.app_fastapi.RAGService")
+    @patch("src.app_fastapi.ChatOpenAI")
+    @patch("src.app_fastapi.create_database")
+    @patch("src.app_fastapi.get_embeddings")
+    @patch("src.app_fastapi.load_settings")
+    def test_init_rag_builds_vectorstore_from_scratch(
+        self,
+        mock_load_settings,
+        mock_get_embeddings,
+        mock_create_database,
+        mock_chat_openai,
+        mock_rag_service,
+    ):
+        """Test that the vectorstore is built from scratch when the config specifies it, and that the correct parameters are passed to create_database."""
+        mock_embeddings = MagicMock(name="Embeddings")
+        mock_vectorstore = MagicMock(name="Vectorstore")
+        mock_llm = MagicMock(name="LLM")
+        mock_rag = MagicMock(name="RAGService")
+
+        mock_load_settings.return_value = _build_config(from_scratch=True)
+        mock_get_embeddings.return_value = mock_embeddings
+        mock_create_database.return_value = mock_vectorstore
+        mock_chat_openai.return_value = mock_llm
+        mock_rag_service.return_value = mock_rag
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "fallback-key",
+                "LLM_API_KEY": "llm-key",
+                "EMBEDDINGS_API_KEY": "emb-key",
+            },
+            clear=True,
+        ):
+            result = app_fastapi._init_rag()
+
+        self.assertIs(result, mock_rag)
+        mock_create_database.assert_called_once_with(
+            data_path="data/books.csv",
+            columns_to_drop=["isbn13", "isbn10"],
+            embeddings=mock_embeddings,
+            index_path="/tmp/index",
+            index_name="books_index",
+        )
+
+    @patch("src.app_fastapi.load_settings")
+    def test_init_rag_rejects_unsupported_llm_provider(self, mock_load_settings):
+        """Test that _init_rag raises an error if the LLM provider specified in the config is not supported."""
+        mock_load_settings.return_value = _build_config(llm_provider="anthropic")
+
+        with self.assertRaisesRegex(ValueError, "Only 'openai' is currently supported"):
+            app_fastapi._init_rag()
+
     @patch("src.app_fastapi._init_rag")
     @patch("src.app_fastapi.load_settings")
     def test_on_app_startup_sets_globals(self, mock_load_settings, mock_init_rag):
@@ -139,8 +215,26 @@ class TestAppFastapi(unittest.TestCase):
         self.assertIsNone(app_fastapi._RAG_ERROR)
         self.assertIsNotNone(app_fastapi._APP_CONFIG)
 
+    @patch("src.app_fastapi._init_rag")
+    @patch("src.app_fastapi.load_settings")
+    def test_on_app_startup_captures_startup_errors(self, mock_load_settings, mock_init_rag):
+        """Test that errors during startup are captured and stored in _RAG_ERROR, and that _RAG_INSTANCE remains None."""
+        mock_load_settings.side_effect = RuntimeError("settings boom")
+        mock_init_rag.return_value = MagicMock(name="RAGService")
+
+        app_fastapi.on_app_startup()
+
+        self.assertIsNone(app_fastapi._APP_CONFIG)
+        self.assertIsNone(app_fastapi._RAG_INSTANCE)
+        self.assertEqual(str(app_fastapi._RAG_ERROR), "settings boom")
+
 
 class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        app_fastapi._RAG_INSTANCE = None
+        app_fastapi._RAG_ERROR = None
+        app_fastapi._APP_CONFIG = None
+
     async def test_rag_endpoint_returns_response(self):
         """Test that the endpoint returns the RAG response."""
         rag = MagicMock(name="RAGService")
@@ -201,6 +295,35 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
             await app_fastapi.rag_endpoint(payload)
 
         self.assertIn("startup errored", str(ctx.exception))
+
+    async def test_health_endpoint_returns_ok_when_ready(self):
+        """Test that the health endpoint returns 'ok' when the RAG service is ready."""
+        app_fastapi._RAG_INSTANCE = MagicMock(name="RAGService")
+        app_fastapi._RAG_ERROR = None
+
+        result = await app_fastapi.health_endpoint()
+
+        self.assertEqual(result.status, "ok")
+
+    async def test_health_endpoint_reports_startup_error(self):
+        """Test that the health endpoint surfaces startup errors."""
+        app_fastapi._RAG_INSTANCE = None
+        app_fastapi._RAG_ERROR = RuntimeError("startup boom")
+
+        with self.assertRaises(Exception) as ctx:
+            await app_fastapi.health_endpoint()
+
+        self.assertIn("Health check failed because startup errored", str(ctx.exception))
+
+    async def test_health_endpoint_reports_service_not_ready(self):
+        """Test that the health endpoint reports that the service is not ready if RAG is not initialized and there are no startup errors."""
+        app_fastapi._RAG_INSTANCE = None
+        app_fastapi._RAG_ERROR = None
+
+        with self.assertRaises(Exception) as ctx:
+            await app_fastapi.health_endpoint()
+
+        self.assertIn("RAG service is not ready yet", str(ctx.exception))
 
 
 if __name__ == "__main__":

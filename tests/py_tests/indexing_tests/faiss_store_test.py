@@ -10,6 +10,11 @@ from src.indexing.faiss_store import add_documents, create_faiss_db, load_store,
 FOLDER_PATH="/tmp/faiss"
 
 class TestFaissStore(unittest.TestCase):
+    def test_create_faiss_db_requires_embeddings(self):
+        """Creating a FAISS store requires an embeddings instance."""
+        with self.assertRaises(ValueError):
+            create_faiss_db(None)
+
     @patch("src.indexing.faiss_store.InMemoryDocstore")
     @patch("src.indexing.faiss_store.FAISS")
     @patch("src.indexing.faiss_store.faiss.IndexFlatL2")
@@ -87,6 +92,11 @@ class TestFaissStore(unittest.TestCase):
         with self.assertRaises(ValueError):
             add_documents(documents, vectorstore)
 
+    def test_add_documents_requires_vectorstore(self):
+        """Adding documents requires a valid vectorstore."""
+        with self.assertRaises(ValueError):
+            add_documents([Document(page_content="Doc 1")], None)
+
     def test_save_store_calls_vectorstore(self):
         """Save store delegates to vectorstore."""
         vectorstore = MagicMock(name="FAISSStore")
@@ -105,6 +115,25 @@ class TestFaissStore(unittest.TestCase):
 
         with self.assertRaises(OSError):
             save_store(vectorstore, path=FOLDER_PATH, index_name="test-index")
+
+    def test_save_store_requires_vectorstore(self):
+        """Saving a store requires a valid vectorstore."""
+        with self.assertRaises(ValueError):
+            save_store(None, path=FOLDER_PATH, index_name="test-index")
+
+    def test_save_store_requires_valid_path(self):
+        """Saving a store requires a valid path."""
+        vectorstore = MagicMock(name="FAISSStore")
+
+        with self.assertRaises(ValueError):
+            save_store(vectorstore, path="", index_name="test-index")
+
+    def test_save_store_requires_valid_index_name(self):
+        """Saving a store requires a valid index name."""
+        vectorstore = MagicMock(name="FAISSStore")
+
+        with self.assertRaises(ValueError):
+            save_store(vectorstore, path=FOLDER_PATH, index_name="")
 
     @patch("src.indexing.faiss_store.FAISS.load_local")
     def test_load_store_returns_vectorstore(self, mock_load_local):
@@ -130,6 +159,34 @@ class TestFaissStore(unittest.TestCase):
         mock_load_local.side_effect = FileNotFoundError("missing")
 
         with self.assertRaises(FileNotFoundError):
+            load_store(embeddings, path=FOLDER_PATH, index_name="test-index")
+
+    def test_load_store_requires_embeddings(self):
+        """Loading a store requires a valid embeddings instance."""
+        with self.assertRaises(ValueError):
+            load_store(None, path=FOLDER_PATH, index_name="test-index")
+
+    def test_load_store_requires_valid_path(self):
+        """Loading a store requires a valid path."""
+        embeddings = MagicMock(name="Embeddings")
+
+        with self.assertRaises(ValueError):
+            load_store(embeddings, path="", index_name="test-index")
+
+    def test_load_store_requires_valid_index_name(self):
+        """Loading a store requires a valid index name."""
+        embeddings = MagicMock(name="Embeddings")
+
+        with self.assertRaises(ValueError):
+            load_store(embeddings, path=FOLDER_PATH, index_name="")
+
+    @patch("src.indexing.faiss_store.FAISS.load_local")
+    def test_load_store_wraps_unexpected_errors(self, mock_load_local):
+        """Unexpected errors during load should be wrapped in a RuntimeError with a clear message."""
+        embeddings = MagicMock(name="Embeddings")
+        mock_load_local.side_effect = RuntimeError("bad index")
+
+        with self.assertRaisesRegex(RuntimeError, "Failed to load FAISS store"):
             load_store(embeddings, path=FOLDER_PATH, index_name="test-index")
 
 
