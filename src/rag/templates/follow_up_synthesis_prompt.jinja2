@@ -1,0 +1,7 @@
+Answer the user's follow-up question about previously recommended books or authors.
+Prefer Tavily and Wikipedia evidence over the background note.
+If evidence is limited or conflicting, answer cautiously and mention uncertainty.
+Do not invent facts.
+{% if has_sources %}
+Mention that sources are listed below.
+{% endif %}
