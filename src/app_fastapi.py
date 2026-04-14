@@ -28,7 +28,7 @@ from src.indexing.embeddings import get_embeddings
 from src.indexing.faiss_store import load_store
 from src.indexing.create_database import create_database
 from src.logging_utils import get_logger, summarize_text
-from src.rag.rag_service import RAGService
+from src.rag.agentic_service import AgenticRAGService
 
 load_dotenv()
 
@@ -36,7 +36,7 @@ logger = get_logger(__name__)
 
 app = FastAPI()
 
-_RAG_INSTANCE: Optional[RAGService] = None
+_RAG_INSTANCE: Optional[AgenticRAGService] = None
 _RAG_ERROR: Optional[Exception] = None
 _APP_CONFIG: Optional[DictConfig] = None
 
@@ -134,7 +134,7 @@ def _parse_csv_list(value: str | None, default: Optional[List[str]] = None) -> L
     return [item for item in items if item]
 
 
-def _init_rag() -> RAGService:
+def _init_rag() -> AgenticRAGService:
     """
     Initialize the RAG service from environment variables.
 
@@ -208,8 +208,30 @@ def _init_rag() -> RAGService:
     )
     k = int(config.rag.retriever_k)
 
-    logger.info("FastAPI RAG dependencies initialized successfully with chat model '%s' and k=%d", llm_model, k)
-    return RAGService(llm=llm, vectorstore=vectorstore, k=k)
+    classifier_model: str = str(config.agentic.classifier_model or llm_model)
+    classifier_llm = ChatOpenAI(
+        model=classifier_model,
+        api_key=llm_api_secret,
+        base_url=llm_base_url,
+        temperature=0,
+    )
+    tavily_max_results = int(config.agentic.tavily_max_results)
+    wikipedia_top_k_results = int(config.agentic.wikipedia_top_k_results)
+
+    logger.info(
+        "FastAPI RAG dependencies initialized successfully with chat model '%s', classifier model '%s' and k=%d",
+        llm_model,
+        classifier_model,
+        k,
+    )
+    return AgenticRAGService(
+        llm=llm,
+        classifier_llm=classifier_llm,
+        vectorstore=vectorstore,
+        k=k,
+        tavily_max_results=tavily_max_results,
+        wikipedia_top_k_results=wikipedia_top_k_results,
+    )
 
 
 @app.on_event("startup")
@@ -234,6 +256,7 @@ def on_app_startup() -> None:
 class RagRequest(BaseModel):
     """Request model for the RAG endpoint."""
     query: str
+    thread_id: str
 
 class RecommendationCard(BaseModel):
     """Model for a recommended book card in the RAG response."""
@@ -244,10 +267,17 @@ class RecommendationCard(BaseModel):
     num_pages: int | str | None = None
 
 
+class SourceLink(BaseModel):
+    """External source attached to a follow-up answer."""
+    title: str
+    url: str
+
+
 class RagResponse(BaseModel):
     """Response model for the RAG endpoint."""
     response: str
     recommendations: list[RecommendationCard] = Field(default_factory=list)
+    sources: list[SourceLink] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -277,7 +307,11 @@ async def rag_endpoint(payload: RagRequest) -> RagResponse:
     :return: Description
     :rtype: RagResponse
     """
-    logger.info("Received /rag request for query: '%s'", summarize_text(payload.query))
+    logger.info(
+        "Received /rag request for thread '%s' and query: '%s'",
+        payload.thread_id,
+        summarize_text(payload.query),
+    )
 
     # Check if it runs properly
     if _RAG_ERROR is not None:
@@ -289,11 +323,12 @@ async def rag_endpoint(payload: RagRequest) -> RagResponse:
 
     # Try to call the RAG instance
     try:
-        result = _RAG_INSTANCE.answer_query(payload.query)
+        result = _RAG_INSTANCE.answer_query(payload.query, payload.thread_id)
         response = result["response"]
         recommendations = result.get("recommendations", [])
+        sources = result.get("sources", [])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to answer /rag request: {exc}") from exc
 
     logger.info("Successfully answered /rag request with response length %d", len(response))
-    return RagResponse(response=response, recommendations=recommendations)
+    return RagResponse(response=response, recommendations=recommendations, sources=sources)
