@@ -45,6 +45,11 @@ def _build_config(
         rag=SimpleNamespace(
             retriever_k=retriever_k,
         ),
+        agentic=SimpleNamespace(
+            classifier_model=None,
+            tavily_max_results=5,
+            wikipedia_top_k_results=3,
+        ),
     )
 
 
@@ -84,7 +89,7 @@ class TestAppFastapi(unittest.TestCase):
             ["title", "author", "summary"],
         )
 
-    @patch("src.app_fastapi.RAGService")
+    @patch("src.app_fastapi.AgenticRAGService")
     @patch("src.app_fastapi.ChatOpenAI")
     @patch("src.app_fastapi.load_store")
     @patch("src.app_fastapi.get_embeddings")
@@ -95,7 +100,7 @@ class TestAppFastapi(unittest.TestCase):
         mock_get_embeddings,
         mock_load_store,
         mock_chat_openai,
-        mock_rag_service,
+        mock_agentic_service,
     ):
         """Test that all the components of the RAG service are correctly built."""
         mock_embeddings = MagicMock(name="Embeddings")
@@ -106,7 +111,7 @@ class TestAppFastapi(unittest.TestCase):
         mock_get_embeddings.return_value = mock_embeddings
         mock_load_store.return_value = mock_vectorstore
         mock_chat_openai.return_value = mock_llm
-        mock_rag_service.return_value = mock_rag
+        mock_agentic_service.return_value = mock_rag
         mock_load_settings.return_value = _build_config()
 
         with patch.dict(
@@ -139,13 +144,16 @@ class TestAppFastapi(unittest.TestCase):
         self.assertEqual(call_kwargs["temperature"], 0)
         self.assertIsNone(call_kwargs["base_url"])
         self.assertEqual(call_kwargs["api_key"].get_secret_value(), "llm-key")
-        mock_rag_service.assert_called_once_with(
+        mock_agentic_service.assert_called_once_with(
             llm=mock_llm,
+            classifier_llm=mock_llm,
             vectorstore=mock_vectorstore,
             k=5,
+            tavily_max_results=5,
+            wikipedia_top_k_results=3,
         )
 
-    @patch("src.app_fastapi.RAGService")
+    @patch("src.app_fastapi.AgenticRAGService")
     @patch("src.app_fastapi.ChatOpenAI")
     @patch("src.app_fastapi.create_database")
     @patch("src.app_fastapi.get_embeddings")
@@ -156,7 +164,7 @@ class TestAppFastapi(unittest.TestCase):
         mock_get_embeddings,
         mock_create_database,
         mock_chat_openai,
-        mock_rag_service,
+        mock_agentic_service,
     ):
         """Test that the vectorstore is built from scratch when the config specifies it, and that the correct parameters are passed to create_database."""
         mock_embeddings = MagicMock(name="Embeddings")
@@ -168,7 +176,7 @@ class TestAppFastapi(unittest.TestCase):
         mock_get_embeddings.return_value = mock_embeddings
         mock_create_database.return_value = mock_vectorstore
         mock_chat_openai.return_value = mock_llm
-        mock_rag_service.return_value = mock_rag
+        mock_agentic_service.return_value = mock_rag
 
         with patch.dict(
             os.environ,
@@ -254,16 +262,18 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
                     "num_pages": 320,
                 }
             ],
+            "sources": [{"title": "Source A", "url": "https://example.com"}],
         }
 
         app_fastapi._RAG_INSTANCE = rag
         app_fastapi._RAG_ERROR = None
 
-        payload = app_fastapi.RagRequest(query="hello")
+        payload = app_fastapi.RagRequest(query="hello", thread_id="thread-1")
         result = await app_fastapi.rag_endpoint(payload)
 
         self.assertEqual(result.response, "ok")
         self.assertEqual(len(result.recommendations), 1)
+        self.assertEqual(len(result.sources), 1)
 
     async def test_rag_endpoint_handles_error(self):
         """Test that the endpoint maps RAG errors to HTTP 500."""
@@ -273,7 +283,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         app_fastapi._RAG_INSTANCE = rag
         app_fastapi._RAG_ERROR = None
 
-        payload = app_fastapi.RagRequest(query="hello")
+        payload = app_fastapi.RagRequest(query="hello", thread_id="thread-1")
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
@@ -284,7 +294,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         app_fastapi._RAG_INSTANCE = None
         app_fastapi._RAG_ERROR = None
 
-        payload = app_fastapi.RagRequest(query="hello")
+        payload = app_fastapi.RagRequest(query="hello", thread_id="thread-1")
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
@@ -295,7 +305,7 @@ class TestAppFastapiAsync(unittest.IsolatedAsyncioTestCase):
         app_fastapi._RAG_INSTANCE = None
         app_fastapi._RAG_ERROR = RuntimeError("startup boom")
 
-        payload = app_fastapi.RagRequest(query="hello")
+        payload = app_fastapi.RagRequest(query="hello", thread_id="thread-1")
         with self.assertRaises(Exception) as ctx:
             await app_fastapi.rag_endpoint(payload)
 
