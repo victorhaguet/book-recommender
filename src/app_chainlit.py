@@ -13,6 +13,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+import uuid
 from typing import Any, Optional, overload, Literal
 
 from dotenv import load_dotenv
@@ -172,9 +173,17 @@ def _sync_post_json(url: str, payload: dict, timeout_seconds: float) -> tuple[in
     except urllib.error.HTTPError as exc:
         logger.warning("RAG endpoint returned HTTP %d", exc.code)
         return exc.code, exc.read().decode("utf-8")
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError(f"Could not reach RAG endpoint at {url}: {reason}") from exc
 
 
-async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) -> dict[str, Any]:
+async def _call_rag_endpoint(
+    endpoint: str,
+    query: str,
+    thread_id: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
     """
     Call the RAG FastAPI endpoint asynchronously.
     
@@ -191,7 +200,7 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
     status, body = await asyncio.to_thread(
         _sync_post_json,
         endpoint,
-        {"query": query},
+        {"query": query, "thread_id": thread_id},
         timeout_seconds,
     )
     if body:
@@ -212,7 +221,26 @@ async def _call_rag_endpoint(endpoint: str, query: str, timeout_seconds: float) 
     recommendations = payload.get("recommendations", [])
     if not isinstance(recommendations, list):
         recommendations = []
-    return {"response": response, "recommendations": recommendations}
+    sources = payload.get("sources", [])
+    if not isinstance(sources, list):
+        sources = []
+    return {"response": response, "recommendations": recommendations, "sources": sources}
+
+
+def _format_sources_section(sources: list[dict[str, Any]]) -> str:
+    """
+    Build a markdown sources section for follow-up answers.
+    """
+    if not sources:
+        return ""
+    lines = ["**Sources**"]
+    for source in sources:
+        title = str(source.get("title", "Source")).strip() or "Source"
+        url = str(source.get("url", "")).strip()
+        if not url:
+            continue
+        lines.append(f"- [{title}]({url})")
+    return "\n".join(lines) if len(lines) > 1 else ""
 
 
 def _format_recommendation_message(card: dict[str, Any]) -> str:
@@ -320,6 +348,7 @@ async def on_chat_start() -> None:
 
     cl.user_session.set("rag_endpoint", _RAG_ENDPOINT)
     cl.user_session.set("rag_ready", True)
+    cl.user_session.set("thread_id", uuid.uuid4().hex)
     logger.info("Chat session is ready to forward requests")
 
 
@@ -340,9 +369,13 @@ async def on_message(message: cl.Message) -> None:
         return
 
     endpoint: str = cl.user_session.get("rag_endpoint")
-    timeout_seconds = 30.0 if _APP_CONFIG is None else float(_APP_CONFIG.frontend.timeout_seconds)
+    thread_id: str | None = cl.user_session.get("thread_id")
+    if not thread_id:
+        thread_id = uuid.uuid4().hex
+        cl.user_session.set("thread_id", thread_id)
+    timeout_seconds = 60.0 if _APP_CONFIG is None else float(_APP_CONFIG.frontend.timeout_seconds)
     try:
-        payload = await _call_rag_endpoint(endpoint, message.content, timeout_seconds)
+        payload = await _call_rag_endpoint(endpoint, message.content, thread_id, timeout_seconds)
     except Exception as exc:
         logger.exception("Chainlit failed to get a response from the RAG backend")
         response = f"RAG error: {exc}"
@@ -353,10 +386,13 @@ async def on_message(message: cl.Message) -> None:
 
     response = str(payload.get("response", "")).strip()
     recommendations = payload.get("recommendations", [])
+    sources = payload.get("sources", [])
     if recommendations:
         intro_message = response or "Here are the books that could correspond to your expectations."
         await cl.Message(
             content=_format_recommendations_response(intro_message, recommendations)
         ).send()
     elif response:
-        await cl.Message(content=response).send()
+        source_section = _format_sources_section(sources)
+        content = response if not source_section else f"{response}\n\n{source_section}"
+        await cl.Message(content=content).send()

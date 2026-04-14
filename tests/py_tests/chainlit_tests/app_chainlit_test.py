@@ -170,6 +170,18 @@ class TestAppChainlit(unittest.TestCase):
         self.assertEqual(status, 503)
         self.assertEqual(body, '{"detail":"backend unavailable"}')
 
+    def test_sync_post_json_raises_clear_error_for_unreachable_backend(self):
+        """Test that _sync_post_json raises a readable RuntimeError when the backend is unreachable."""
+        error = urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+
+        with patch("src.app_chainlit.urllib.request.urlopen", side_effect=error):
+            with self.assertRaisesRegex(RuntimeError, "Could not reach RAG endpoint"):
+                app_chainlit._sync_post_json(
+                    "http://127.0.0.1:8000/rag",
+                    {"query": "hello", "thread_id": "thread-1"},
+                    5.0,
+                )
+
     def test_on_app_startup_captures_startup_errors(self):
         """Test that startup errors are captured and stored in _RAG_ERROR."""
         with patch("src.app_chainlit.load_settings", side_effect=RuntimeError("config boom")):
@@ -199,6 +211,7 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
         mock_set.assert_any_call("rag_endpoint", "http://127.0.0.1:8000/rag")
         mock_set.assert_any_call("rag_ready", True)
+        mock_set.assert_any_call("thread_id", unittest.mock.ANY)
         mock_msg.assert_not_called()
 
     async def test_set_starters_returns_configured_starters(self):
@@ -224,7 +237,7 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(return_value=(200, "not json")),
         ):
             with self.assertRaisesRegex(RuntimeError, "malformed API response"):
-                await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", 30.0)
+                await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", "thread-1", 30.0)
 
     async def test_call_rag_endpoint_raises_runtime_error_for_http_status(self):
         """Test that a RuntimeError is raised when the RAG endpoint returns a non-200 HTTP status."""
@@ -233,17 +246,17 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(return_value=(500, json.dumps({"detail": "backend failed"}))),
         ):
             with self.assertRaisesRegex(RuntimeError, "backend failed"):
-                await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", 30.0)
+                await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", "thread-1", 30.0)
 
     async def test_call_rag_endpoint_replaces_invalid_recommendations_with_empty_list(self):
         """Test that invalid recommendations are replaced with an empty list."""
         with patch(
             "src.app_chainlit.asyncio.to_thread",
-            new=AsyncMock(return_value=(200, json.dumps({"response": "ok", "recommendations": "oops"}))),
+            new=AsyncMock(return_value=(200, json.dumps({"response": "ok", "recommendations": "oops", "sources": "oops"}))),
         ):
-            payload = await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", 30.0)
+            payload = await app_chainlit._call_rag_endpoint("http://127.0.0.1:8000/rag", "hello", "thread-1", 30.0)
 
-        self.assertEqual(payload, {"response": "ok", "recommendations": []})
+        self.assertEqual(payload, {"response": "ok", "recommendations": [], "sources": []})
 
     async def test_on_message_sends_response(self):
         """Test that the application answer user's message"""
@@ -256,7 +269,7 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
         with patch(
             "src.app_chainlit.cl.user_session.get",
-            side_effect=[True, "http://127.0.0.1:8000/rag"],
+            side_effect=[True, "http://127.0.0.1:8000/rag", "thread-1"],
         ), patch(
             "src.app_chainlit._call_rag_endpoint",
             return_value={
@@ -270,6 +283,7 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
                         "num_pages": 320,
                     }
                 ],
+                "sources": [],
             },
         ), patch(
             "src.app_chainlit.cl.Message",
@@ -290,7 +304,7 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
         with patch(
             "src.app_chainlit.cl.user_session.get",
-            side_effect=[True, "http://127.0.0.1:8000/rag"],
+            side_effect=[True, "http://127.0.0.1:8000/rag", "thread-1"],
         ), patch(
             "src.app_chainlit._call_rag_endpoint",
             side_effect=RuntimeError("boom"),
@@ -351,15 +365,41 @@ class TestAppChainlitAsync(unittest.IsolatedAsyncioTestCase):
 
         with patch(
             "src.app_chainlit.cl.user_session.get",
-            side_effect=[True, "http://127.0.0.1:8000/rag"],
+            side_effect=[True, "http://127.0.0.1:8000/rag", "thread-1"],
         ), patch(
             "src.app_chainlit._call_rag_endpoint",
-            return_value={"response": "plain response", "recommendations": []},
+            return_value={"response": "plain response", "recommendations": [], "sources": []},
         ), patch("src.app_chainlit.cl.Message", return_value=message_instance) as mock_message:
             await app_chainlit.on_message(incoming)
 
         mock_message.assert_called_once_with(content="plain response")
         message_instance.send.assert_awaited_once()
+
+    async def test_on_message_appends_sources_to_plain_response(self):
+        """Test that follow-up answers include a rendered sources section."""
+        message_instance = MagicMock()
+        message_instance.send = AsyncMock()
+        incoming = MagicMock()
+        incoming.content = "hello"
+        app_chainlit._APP_CONFIG = _build_config()
+
+        with patch(
+            "src.app_chainlit.cl.user_session.get",
+            side_effect=[True, "http://127.0.0.1:8000/rag", "thread-1"],
+        ), patch(
+            "src.app_chainlit._call_rag_endpoint",
+            return_value={
+                "response": "plain response",
+                "recommendations": [],
+                "sources": [{"title": "Source A", "url": "https://example.com"}],
+            },
+        ), patch("src.app_chainlit.cl.Message", return_value=message_instance) as mock_message:
+            await app_chainlit.on_message(incoming)
+
+        mock_message.assert_called_once()
+        sent_content = mock_message.call_args.kwargs["content"]
+        self.assertIn("plain response", sent_content)
+        self.assertIn("Sources", sent_content)
 
 
 if __name__ == "__main__":
