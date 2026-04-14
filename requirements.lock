@@ -5,7 +5,10 @@ langchain==1.2.3
 langchain-core==1.2.7
 langchain-openai==1.1.7
 langchain-community==0.4.1
+langgraph==1.0.3
+langchain-tavily
 pandas==2.3.3
+wikipedia
 faiss-cpu==1.13.2
 chainlit==2.9.6
 fastapi==0.128.0
