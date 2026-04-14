@@ -2,36 +2,52 @@
 
 # Book Recommender
 
-`book-recommender` is a retrieval-augmented generation project that recommends books from a catalog based on a natural-language query.
+`book-recommender` is an agentic retrieval-augmented generation project that recommends books from a catalog and supports follow-up discussion about recommended books and authors.
 
 The repository is structured as a small production-style AI application:
-- a FastAPI backend that builds or loads the retrieval stack and exposes the RAG endpoint
+- a FastAPI backend that builds or loads the retrieval stack, hosts the LangGraph workflow, and exposes the RAG endpoint
 - a Chainlit frontend that provides a chat interface
 - a modular indexing and retrieval pipeline built with LangChain and FAISS
-- a Python test suite covering ingestion, indexing, RAG logic, FastAPI, and Chainlit integration
+- a Python test suite covering ingestion, indexing, prompts, RAG logic, agentic routing, FastAPI, and Chainlit integration
 
 ## Features
 
-- Search books with natural-language requests such as `I want a fantasy book with trolls.`
+- Search books with natural-language recommendation requests such as `I want a fantasy book with trolls.`
+- Separate query recognition from recommendation generation
+- Maintain per-thread conversation context through a backend-managed `thread_id`
+- Route turns between recommendation, follow-up, clarification, and rejection paths with LangGraph
+- Run Tavily, Wikipedia, and LLM background lookups in parallel for follow-up questions
+- Return structured recommendation cards and follow-up source links
 - Build a FAISS vector index from a CSV dataset
 - Load a prebuilt index to avoid rebuilding embeddings on every startup
 - Support OpenAI-compatible embeddings or local Hugging Face embeddings
-- Configure the chat LLM separately from the embedding backend
+- Configure separate chat models for recommendation generation and query recognition
 - Serve the backend and frontend locally or through Docker Compose
 - Run the full test suite and coverage checks from single commands
 
 ## Architecture
 
-The application flow is:
+The application has two layers:
 
-1. A books dataset is loaded from CSV.
-2. Each row is converted into a LangChain `Document`.
-3. The `description` column becomes the text used for retrieval.
-4. The remaining columns are stored as metadata.
-5. Documents are embedded and stored in a FAISS vector store.
-6. A retriever fetches the top `k` matching books for a user query.
-7. Retrieved books are formatted into a prompt.
-8. A chat model generates the final recommendation answer.
+1. An indexing layer that loads `data/books.csv`, converts rows into LangChain `Document` objects, embeds them, and stores them in FAISS.
+2. An agentic runtime layer that uses LangGraph to decide whether a user turn should:
+   - generate new book recommendations from the catalog
+   - answer a follow-up question about recommended books or authors
+   - ask for clarification
+   - reject the request as out of scope
+
+### Agentic Workflow
+
+![Agentic workflow graph](/public/agentic-workflow.png)
+
+### Runtime Flow
+
+1. Chainlit creates or reuses a `thread_id` for the chat session.
+2. FastAPI forwards the request to `AgenticRAGService`.
+3. LangGraph classifies the turn before any generation happens.
+4. For recommendation turns, the existing FAISS retriever and recommendation prompt are used.
+5. For follow-up turns, the graph fans out into Tavily, Wikipedia, and LLM background nodes in parallel, then synthesizes a final answer with sources.
+6. The backend updates thread memory so the next user turn can use prior recommendations and recent conversation context.
 
 Main files:
 - [src/app_fastapi.py](src/app_fastapi.py): FastAPI backend entrypoint
@@ -42,6 +58,8 @@ Main files:
 - [src/indexing/retriever.py](src/indexing/retriever.py): retriever setup
 - [src/rag/chain.py](src/rag/chain.py): core RAG chain
 - [src/rag/rag_service.py](src/rag/rag_service.py): service orchestration
+- [src/rag/agentic_service.py](src/rag/agentic_service.py): LangGraph routing, thread memory, and follow-up orchestration
+- [src/rag/prompts.py](src/rag/prompts.py): prompt/template loading helpers
 
 ## Data
 
@@ -92,7 +110,18 @@ Important secret environment variables:
 
 Default example values live in [.env.example](.env.example).
 
-Example Hydra settings live in [conf/config.yaml](conf/config.yaml). To change the embedding backend, LLM model, retriever `k`, index paths, or frontend endpoint, update the config files.
+Example Hydra settings live in [conf/config.yaml](conf/config.yaml). To change the embedding backend, LLM model, classifier model, retriever `k`, follow-up search limits, index paths, or frontend endpoint, update the config files.
+
+Agentic settings in [conf/config.yaml](conf/config.yaml):
+- `agentic.classifier_model`: optional dedicated model for query recognition
+- `agentic.tavily_max_results`: maximum Tavily results for follow-up questions
+- `agentic.wikipedia_top_k_results`: maximum Wikipedia results for follow-up questions
+
+Important extra secrets for the agentic follow-up flow:
+
+| Variable | Purpose |
+| --- | --- |
+| `TAVILY_API_KEY` | Enables Tavily search in the follow-up branch |
 
 ## Local Development
 
@@ -205,7 +234,7 @@ Query the RAG API:
 ```bash
 curl -X POST http://127.0.0.1:8000/rag \
   -H "Content-Type: application/json" \
-  -d '{"query":"I want a fantasy book with dragons and political intrigue"}'
+  -d '{"thread_id":"demo-thread","query":"I want a fantasy book with dragons and political intrigue"}'
 ```
 
 Expected response shape:
@@ -213,6 +242,12 @@ Expected response shape:
 ```json
 {
   "response": "...",
+  "sources": [
+    {
+      "title": "...",
+      "url": "..."
+    }
+  ],
   "recommendations": [
     {
       "title": "...",
@@ -225,7 +260,10 @@ Expected response shape:
 }
 ```
 
-The backend returns recommendation book cards in addition to the intro text. This keeps the answer format cleaner and gives the frontend structured fields for the title, author, thumbnail, short description, and number of pages.
+Notes:
+- `thread_id` is required so the backend can keep per-conversation memory.
+- Recommendation turns usually return populated `recommendations` and an empty `sources` list.
+- Follow-up turns usually return an empty `recommendations` list and a populated `sources` list.
 
 ## Frontend Usage
 
@@ -234,10 +272,18 @@ The Chainlit app is a lightweight chat client for the FastAPI backend.
 When started, it:
 - resolves the backend RAG endpoint from Hydra config
 - waits for the backend to be available
-- forwards user messages to the `/rag` endpoint
-- displays a single response message with an introduction followed by cleaner recommendation cards
+- creates a session-level `thread_id`
+- forwards user messages to the `/rag` endpoint with that `thread_id`
+- displays recommendation turns as an introduction followed by structured recommendation cards
+- displays follow-up turns as sourced prose answers
 
-Each recommendation card is rendered from structured backend data instead of relying only on raw LLM prose. In practice, this makes the recommendations easier to read and allows the UI to show the book title, cover thumbnail, author, page count, and short description in a consistent order.
+Each recommendation card is rendered from structured backend data instead of relying only on raw LLM prose. Follow-up answers can additionally render a `Sources` section from the backend response.
+
+### Example Result
+
+The image below shows a visual example of a recommendation result in the Chainlit interface for a specific query.
+
+![Visual example of a book recommendation result](/public/book-recommender-visual.png)
 
 ## Testing
 
@@ -250,6 +296,7 @@ Coverage includes:
 - retriever creation
 - prompt and formatting logic
 - RAG chain behavior
+- agentic routing and thread handling
 - FastAPI entrypoint behavior
 - Chainlit entrypoint behavior
 
