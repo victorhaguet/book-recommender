@@ -184,6 +184,7 @@ def _init_rag() -> AgenticRAGService:
     index_name: str = config.index.name
     data_path: str = config.index.data_path
     columns_to_drop: List[str] = list(config.index.columns_to_drop)
+    min_description_words: int = int(config.index.min_description_words)
 
     vectorstore: FAISS
     if from_scratch:
@@ -191,6 +192,7 @@ def _init_rag() -> AgenticRAGService:
         vectorstore = create_database(
             data_path=data_path,
             columns_to_drop=columns_to_drop,
+            min_description_words=min_description_words,
             embeddings=embeddings,
             index_path=index_path,
             index_name=index_name,

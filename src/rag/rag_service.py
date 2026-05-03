@@ -140,7 +140,7 @@ def _build_fallback_recommendation_cards(
         title = _stringify(metadata.get("title"))
         author = _stringify(metadata.get("authors", metadata.get("author")))
         thumbnail = _stringify(metadata.get("thumbnail"), fallback="")
-        description = _stringify(document.page_content)
+        description = _stringify(metadata.get("description", document.page_content))
 
         # Truncate the description to 280 characters for display purposes.
         summary = description

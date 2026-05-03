@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 def create_database(
         data_path: str, 
         columns_to_drop: List[str], 
+        min_description_words: int,
         embeddings: Embeddings,
         index_path: str,
         index_name: str
@@ -32,6 +33,9 @@ def create_database(
     :type data_path: str
     :param columns_to_drop: Columns to ignore during the creation of the database
     :type columns_to_drop: List[str]
+    :param min_description_words: minimum word count required for a description
+        to be indexed
+    :type min_description_words: int
     :param embeddings: Embedding model to use for encoding
     :type embeddings: OpenAIEmbeddings
     :param index_path: Path where the index should be stored
@@ -51,7 +55,8 @@ def create_database(
     # Ingest data
     books: List[Document] = load_books(
         path=data_path, 
-        columns_to_drop=columns_to_drop
+        columns_to_drop=columns_to_drop,
+        min_description_words=min_description_words,
     )
     logger.info("Loaded %d documents for index creation", len(books))
 
