@@ -67,14 +67,15 @@ The repository includes a dataset at [data/books.csv](data/books.csv).
 
 The ingestion layer assumes:
 - the source is a CSV file
-- `description` is used as the retrievable text
+- rows with blank or very short descriptions are excluded from indexing
+- the retrievable text is built from `title`, `authors`, `categories`, and `description`
 - all other kept columns become metadata attached to each document
 
 By default, the example configuration drops:
 - `isbn13`
 - `isbn10`
 
-Rows with missing descriptions are removed during ingestion.
+By default, descriptions shorter than `10` words are removed during ingestion.
 
 By default, the FAISS index is stored under [data/faiss_index](data/faiss_index).
 If `index.from_scratch: false`, the backend loads the existing index from that folder instead of rebuilding it.
