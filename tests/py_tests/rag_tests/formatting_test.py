@@ -11,15 +11,19 @@ class TestFormatting(unittest.TestCase):
         """Test happy path of formatting retrieved books"""
         books = [
             Document(
-                page_content="Desc A",
+                page_content="Title: Book A\nAuthor: Alice\nGenre: Fantasy\nDescription: Indexed text",
                 metadata={
                     "title": "Book A",
                     "author": "Alice",
+                    "description": "Desc A",
                     "thumbnail": "https://example.com/a.jpg",
                     "categories": "Fantasy",
                 },
             ),
-            Document(page_content="Desc B", metadata={"title": "Book B"}),
+            Document(
+                page_content="Title: Book B\nDescription: Indexed text",
+                metadata={"title": "Book B", "description": "Desc B"},
+            ),
         ]
 
         formatted = build_default_retrieved_books_format(books)
@@ -30,6 +34,7 @@ class TestFormatting(unittest.TestCase):
         self.assertIn("authors: Alice", formatted)
         self.assertIn("thumbnail: https://example.com/a.jpg", formatted)
         self.assertIn("- categories: Fantasy", formatted)
+        self.assertNotIn("- description:", formatted)
         self.assertIn("Recommendation 2", formatted)
         self.assertIn("description: Desc B", formatted)
         self.assertIn("title: Book B", formatted)

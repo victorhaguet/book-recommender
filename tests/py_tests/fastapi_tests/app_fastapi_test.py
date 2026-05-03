@@ -16,6 +16,7 @@ def _build_config(
     embeddings_base_url=None,
     from_scratch: bool = False,
     data_path: str = "data/books.csv",
+    min_description_words: int = 10,
     columns_to_drop=None,
     index_path: str = "/tmp/index",
     index_name: str = "books_index",
@@ -33,6 +34,7 @@ def _build_config(
         index=SimpleNamespace(
             from_scratch=from_scratch,
             data_path=data_path,
+            min_description_words=min_description_words,
             columns_to_drop=columns_to_drop or ["isbn13", "isbn10"],
             path=index_path,
             name=index_name,
@@ -193,6 +195,7 @@ class TestAppFastapi(unittest.TestCase):
         mock_create_database.assert_called_once_with(
             data_path="data/books.csv",
             columns_to_drop=["isbn13", "isbn10"],
+            min_description_words=10,
             embeddings=mock_embeddings,
             index_path="/tmp/index",
             index_name="books_index",

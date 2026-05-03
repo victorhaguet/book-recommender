@@ -14,6 +14,7 @@ embeddings:
 index:
   from_scratch: true # If true, the index will be created from scratch, otherwise it will try to load an existing index
   data_path: data/books.csv
+  min_description_words: 10 # Descriptions shorter than this are excluded from indexing
   columns_to_drop:
     - isbn13
     - isbn10

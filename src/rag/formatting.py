@@ -50,13 +50,13 @@ def build_default_retrieved_books_format(books:List[Document])-> str:
         title = metadata.get("title", "N/A")
         authors = metadata.get("authors", metadata.get("author", "N/A"))
         thumbnail = metadata.get("thumbnail", "N/A")
-        description = _stringify_metadata_value(book.page_content)
+        description = _stringify_metadata_value(metadata.get("description", book.page_content))
 
         # Format the normalized values into a structured string
         remaining_metadata_lines = [
             f"- {key}: {value}"
             for key, value in metadata.items()
-            if key not in {"title", "authors", "author", "thumbnail"}
+            if key not in {"title", "authors", "author", "thumbnail", "description"}
         ]
         remaining_metadata = "\n".join(remaining_metadata_lines) if remaining_metadata_lines else "- None"
 

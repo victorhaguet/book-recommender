@@ -33,8 +33,19 @@ class TestBookLoader(unittest.TestCase):
         """
         df = pd.DataFrame(
             [
-                {"title": "Book A", "author": "Alice", "description": "Desc A", "year": 2020},
-                {"title": "Book B", "author": "Bob", "description": "Desc B", "year": 2021},
+                {
+                    "title": "Book A",
+                    "author": "Alice",
+                    "genre": "Fantasy",
+                    "description": "A gifted young hero uncovers a royal conspiracy that threatens his city forever.",
+                    "year": 2020,
+                },
+                {
+                    "title": "Book B",
+                    "author": "Bob",
+                    "description": "A quiet scholar is forced into court politics after finding forbidden letters.",
+                    "year": 2021,
+                },
             ]
         )
         self._write_df_to_csv(df)
@@ -46,38 +57,85 @@ class TestBookLoader(unittest.TestCase):
         self.assertTrue(all(isinstance(d, Document) for d in docs))
 
         # Check contents and metadata
-        self.assertEqual(docs[0].page_content, "Desc A")
-        self.assertEqual(docs[0].metadata, {"title": "Book A", "author": "Alice"})
+        self.assertEqual(
+            docs[0].page_content,
+            "\n".join(
+                [
+                    "Title: Book A",
+                    "Author: Alice",
+                    "Genre: Fantasy",
+                    "Description: A gifted young hero uncovers a royal conspiracy that threatens his city forever.",
+                ]
+            ),
+        )
+        self.assertEqual(
+            docs[0].metadata,
+            {
+                "title": "Book A",
+                "author": "Alice",
+                "genre": "Fantasy",
+                "description": "A gifted young hero uncovers a royal conspiracy that threatens his city forever.",
+            },
+        )
 
-        self.assertEqual(docs[1].page_content, "Desc B")
-        self.assertEqual(docs[1].metadata, {"title": "Book B", "author": "Bob"})
+        self.assertEqual(
+            docs[1].page_content,
+            "\n".join(
+                [
+                    "Title: Book B",
+                    "Author: Bob",
+                    "Genre: Unknown",
+                    "Description: A quiet scholar is forced into court politics after finding forbidden letters.",
+                ]
+            ),
+        )
+        self.assertEqual(
+            docs[1].metadata,
+            {
+                "title": "Book B",
+                "author": "Bob",
+                "genre": "Unknown",
+                "description": "A quiet scholar is forced into court politics after finding forbidden letters.",
+            },
+        )
 
-    def test_load_books_filters_missing_descriptions(self):
-        """ Test that books without descriptions are dropped.
+    def test_load_books_filters_missing_blank_and_short_descriptions(self):
+        """ Test that books without usable descriptions are dropped.
         """
         df = pd.DataFrame(
             [
-                {"title": "Book C", "description": "Desc C"},
+                {
+                    "title": "Book C",
+                    "description": "A reluctant heir investigates crimes inside the royal court to protect his home city.",
+                },
                 {"title": "Book D", "description": None},
                 {"title": "Book E", "description": float("nan")},
-                {"title": "Book F", "description": "Desc F"},
+                {"title": "Book F", "description": "   "},
+                {"title": "Book G", "description": "fantasy novel"},
             ]
         )
         self._write_df_to_csv(df)
 
         docs = load_books(self.csv_path, columns_to_drop=[])
 
-        # Ensure that only books with an STR value in the description field are kept.
-        self.assertEqual(len(docs), 2)
-        self.assertEqual([d.metadata["title"] for d in docs], ["Book C", "Book F"])
-        self.assertEqual([d.page_content for d in docs], ["Desc C", "Desc F"])
+        self.assertEqual(len(docs), 1)
+        self.assertEqual([d.metadata["title"] for d in docs], ["Book C"])
+        self.assertEqual(
+            docs[0].metadata["description"],
+            "A reluctant heir investigates crimes inside the royal court to protect his home city.",
+        )
 
     def test_load_books_drop_columns(self):
         """ Test whether the columns have been dropped. 
         """
         df = pd.DataFrame(
             [
-                {"title": "Book G", "author": "Alice", "genre": "Sci-Fi", "description": "Desc G"},
+                {
+                    "title": "Book G",
+                    "author": "Alice",
+                    "genre": "Sci-Fi",
+                    "description": "An isolated pilot survives on a hostile planet while decoding an alien distress beacon.",
+                },
             ]
         )
         self._write_df_to_csv(df)
@@ -85,7 +143,14 @@ class TestBookLoader(unittest.TestCase):
         docs = load_books(self.csv_path, columns_to_drop=["genre"])
 
         self.assertEqual(len(docs), 1)
-        self.assertEqual(docs[0].metadata, {"title": "Book G", "author": "Alice"})
+        self.assertEqual(
+            docs[0].metadata,
+            {
+                "title": "Book G",
+                "author": "Alice",
+                "description": "An isolated pilot survives on a hostile planet while decoding an alien distress beacon.",
+            },
+        )
         self.assertNotIn("genre", docs[0].metadata)
 
     def test_load_books_raises_if_description_column_missing(self):
@@ -110,6 +175,18 @@ class TestBookLoader(unittest.TestCase):
         # pandas.DataFrame.drop raises KeyError by default for unknown columns
         with self.assertRaises(ValueError):
             load_books(self.csv_path, columns_to_drop=["does_not_exist"])
+
+    def test_load_books_rejects_invalid_min_description_words(self):
+        """Test that invalid minimum word counts raise a ValueError."""
+        df = pd.DataFrame(
+            [
+                {"title": "Book I", "description": "This valid description contains more than enough words for indexing."},
+            ]
+        )
+        self._write_df_to_csv(df)
+
+        with self.assertRaises(ValueError):
+            load_books(self.csv_path, columns_to_drop=[], min_description_words=-1)
 
     def test_load_books_raises_for_missing_dataset_file(self):
         """ Test that a FileNotFoundError is raised when the specified CSV file does not exist."""

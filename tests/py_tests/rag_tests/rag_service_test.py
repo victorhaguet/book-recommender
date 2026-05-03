@@ -77,11 +77,22 @@ class TestRAGService(unittest.TestCase):
         docs = [
             Document(
                 page_content="A" * 300,
-                metadata={"title": "Book A", "authors": "Alice", "thumbnail": "", "num_pages": 123},
+                metadata={
+                    "title": "Book A",
+                    "authors": "Alice",
+                    "description": "A" * 300,
+                    "thumbnail": "",
+                    "num_pages": 123,
+                },
             ),
             Document(
-                page_content="Desc B",
-                metadata={"title": "Book B", "author": "Bob", "thumbnail": "https://example.com/b.jpg"},
+                page_content="Title: Book B\nDescription: Indexed text",
+                metadata={
+                    "title": "Book B",
+                    "author": "Bob",
+                    "description": "Desc B",
+                    "thumbnail": "https://example.com/b.jpg",
+                },
             ),
         ]
 
