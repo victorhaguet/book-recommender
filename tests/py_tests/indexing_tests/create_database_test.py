@@ -37,6 +37,7 @@ class TestCreateDatabase(unittest.TestCase):
         result = create_database(
             data_path=DATA_PATH,
             columns_to_drop=["col1"],
+            min_description_words=10,
             embeddings=embeddings,
             index_path=INDEX_PATH,
             index_name=INDEX_NAME,
@@ -46,6 +47,7 @@ class TestCreateDatabase(unittest.TestCase):
         mock_load_books.assert_called_once_with(
             path=DATA_PATH,
             columns_to_drop=["col1"],
+            min_description_words=10,
         )
         mock_create_faiss_db.assert_called_once_with(embeddings)
         mock_add_documents.assert_called_once_with(
@@ -76,6 +78,7 @@ class TestCreateDatabase(unittest.TestCase):
             create_database(
                 data_path=DATA_PATH,
                 columns_to_drop=["col1"],
+                min_description_words=10,
                 embeddings=MagicMock(name="Embeddings"),
                 index_path=INDEX_PATH,
                 index_name=INDEX_NAME,
@@ -104,6 +107,7 @@ class TestCreateDatabase(unittest.TestCase):
             create_database(
                 data_path=DATA_PATH,
                 columns_to_drop=["col1"],
+                min_description_words=10,
                 embeddings=MagicMock(name="Embeddings"),
                 index_path=INDEX_PATH,
                 index_name=INDEX_NAME,
@@ -133,6 +137,7 @@ class TestCreateDatabase(unittest.TestCase):
             create_database(
                 data_path=DATA_PATH,
                 columns_to_drop=["col1"],
+                min_description_words=10,
                 embeddings=MagicMock(name="Embeddings"),
                 index_path=INDEX_PATH,
                 index_name=INDEX_NAME,
